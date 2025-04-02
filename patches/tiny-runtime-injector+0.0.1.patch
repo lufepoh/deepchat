@@ -1,0 +1,14 @@
+diff --git a/node_modules/tiny-runtime-injector/dist/index.js b/node_modules/tiny-runtime-injector/dist/index.js
+index 4929fb6..ffab180 100644
+--- a/node_modules/tiny-runtime-injector/dist/index.js
++++ b/node_modules/tiny-runtime-injector/dist/index.js
+@@ -7,7 +7,8 @@ import axios from "axios";
+ import { createWriteStream } from "fs";
+ import { pipeline } from "node:stream/promises";
+ import * as tar from "tar";
+-import { glob } from "glob";
++import globPkg from 'glob';
++const { glob } = globPkg;
+ const execAsync = promisify(exec);
+ const DEFAULT_NODE_VERSION = "v22.9.0";
+ export class RuntimeInjector {
