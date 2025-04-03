@@ -1,14 +1,15 @@
-import { nanoid } from 'nanoid'
 import { eventBus } from '@/eventbus'
 import { MCP_EVENTS } from '@/events'
 import {
   MCPToolCall,
   MCPToolDefinition,
   MCPToolResponse,
+  MCPContentItem,
+  MCPTextContent,
   IConfigPresenter
 } from '@shared/presenter'
 import { ServerManager } from './serverManager'
-import { McpClient, Tool } from './mcpClient'
+import { McpClient } from './mcpClient'
 import { jsonrepair } from 'jsonrepair'
 
 export class ToolManager {
@@ -35,40 +36,41 @@ export class ToolManager {
     }
 
     try {
+      // 转换为MCPToolDefinition格式
+      const results: MCPToolDefinition[] = []
       // 获取工具列表
-      const tools: Tool[] = []
       for (const client of clients) {
         const clientTools = await client.listTools()
         if (clientTools) {
-          tools.push(...clientTools)
-        }
-      }
-      if (!tools) {
-        return []
-      }
-
-      // 转换为MCPToolDefinition格式
-      const results: MCPToolDefinition[] = []
-      for (const tool of tools) {
-        const properties = tool.inputSchema.properties || {}
-        const toolProperties = { ...properties }
-        for (const key in toolProperties) {
-          if (!toolProperties[key].description) {
-            toolProperties[key].description = 'Params of ' + key
-          }
-        }
-        results.push({
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: {
-              type: 'object',
-              properties: toolProperties,
-              required: Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []
+          for (const tool of clientTools) {
+            const properties = tool.inputSchema.properties || {}
+            const toolProperties = { ...properties }
+            for (const key in toolProperties) {
+              if (!toolProperties[key].description) {
+                toolProperties[key].description = 'Params of ' + key
+              }
             }
+            results.push({
+              type: 'function',
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: {
+                  type: 'object',
+                  properties: toolProperties,
+                  required: Array.isArray(tool.inputSchema.required)
+                    ? tool.inputSchema.required
+                    : []
+                }
+              },
+              server: {
+                name: client.serverName,
+                icons: client.serverConfig.icons as string,
+                description: client.serverConfig.descriptions as string
+              }
+            })
           }
-        })
+        }
       }
       return results
     } catch (error) {
@@ -174,10 +176,42 @@ export class ToolManager {
       // 调用 MCP 工具
       const result = await targetClient.callTool(name, args || {})
 
+      // 格式化返回的内容
+      let formattedContent: string | MCPContentItem[] = ''
+
+      // 检查返回内容类型并进行适当处理
+      if (typeof result.content === 'string') {
+        formattedContent = result.content
+      } else if (Array.isArray(result.content)) {
+        // 转换内容项到MCPContentItem类型
+        formattedContent = result.content.map((item) => {
+          if (typeof item === 'string') {
+            return { type: 'text', text: item } as MCPTextContent
+          }
+
+          // 已经是正确格式的内容项
+          if (item.type === 'text' || item.type === 'image' || item.type === 'resource') {
+            return item as MCPContentItem
+          }
+
+          // 处理其他格式，转为文本类型
+          if (item.type && item.text) {
+            return { type: 'text', text: item.text } as MCPTextContent
+          }
+
+          // 无法识别的格式，转为JSON字符串
+          return { type: 'text', text: JSON.stringify(item) } as MCPTextContent
+        })
+      } else if (result.content) {
+        // 处理非数组非字符串的内容，转为字符串
+        formattedContent = JSON.stringify(result.content)
+      }
+
       // 返回工具调用结果
       const response: MCPToolResponse = {
         toolCallId: toolCall.id,
-        content: result
+        content: formattedContent,
+        isError: result.isError
       }
 
       // 触发工具调用结果事件
@@ -190,18 +224,6 @@ export class ToolManager {
       return {
         toolCallId: toolCall.id,
         content: `Error: ${errorMessage}`
-      }
-    }
-  }
-
-  // 创建工具调用对象
-  createToolCall(toolName: string, args: Record<string, string>): MCPToolCall {
-    return {
-      id: nanoid(),
-      type: 'function',
-      function: {
-        name: `${toolName}`,
-        arguments: JSON.stringify(args)
       }
     }
   }

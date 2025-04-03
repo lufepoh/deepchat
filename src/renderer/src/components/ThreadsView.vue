@@ -110,6 +110,8 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
+import { CONVERSATION_EVENTS } from '@/events'
+import { useEventListener } from '@vueuse/core'
 
 const { t } = useI18n()
 const chatStore = useChatStore()
@@ -270,6 +272,10 @@ const handleRenameDialogCancel = () => {
 
 // 在组件挂载时加载会话列表
 onMounted(async () => {
+  // 监听创建新会话事件
+  window.electron.ipcRenderer.on(CONVERSATION_EVENTS.CREATED, async () => {
+    await createNewThread()
+  })
   currentPage.value = 1 // 重置页码
   await chatStore.loadThreads(1)
 
@@ -278,9 +284,7 @@ onMounted(async () => {
     const viewportElement = scrollAreaRef.value?.$el?.querySelector('.h-full.w-full') as HTMLElement
     if (viewportElement) {
       console.log('设置直接DOM滚动监听')
-      viewportElement.addEventListener('scroll', (event) => {
-        handleScroll(event)
-      })
+      useEventListener(viewportElement, 'scroll', handleScroll)
     }
   })
 })

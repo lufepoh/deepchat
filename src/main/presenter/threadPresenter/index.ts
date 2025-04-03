@@ -11,6 +11,7 @@ import {
   IConfigPresenter,
   ILlmProviderPresenter
 } from '../../../shared/presenter'
+import { presenter } from '@/presenter'
 import { MessageManager } from './messageManager'
 import { eventBus } from '@/eventbus'
 import {
@@ -23,22 +24,12 @@ import {
 } from '@shared/chat'
 import { approximateTokenSize } from 'tokenx'
 import { getModelConfig } from '../llmProviderPresenter/modelConfigs'
-import { SearchManager } from './searchManager'
+import { generateSearchPrompt, SearchManager } from './searchManager'
 import { getFileContext } from './fileContext'
 import { ContentEnricher } from './contentEnricher'
 import { CONVERSATION_EVENTS, STREAM_EVENTS } from '@/events'
 import { ChatMessage, ChatMessageContent } from '../llmProviderPresenter/baseProvider'
-import { ARTIFACTS_PROMPT } from '@/lib/artifactsPrompt'
-
-const DEFAULT_SETTINGS: CONVERSATION_SETTINGS = {
-  systemPrompt: '',
-  temperature: 0.7,
-  contextLength: 1000,
-  maxTokens: 2000,
-  providerId: 'openai',
-  modelId: 'gpt-4',
-  artifacts: 0
-}
+import { DEFAULT_SETTINGS } from './const'
 
 interface GeneratingMessageState {
   message: AssistantMessage
@@ -51,145 +42,10 @@ interface GeneratingMessageState {
   lastReasoningTime: number | null
   isSearching?: boolean
   isCancelled?: boolean
-}
-const SEARCH_PROMPT_TEMPLATE = `
-# The following content is based on the search results from the user's message:
-{{SEARCH_RESULTS}}
-In the search results I provided, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please reference the context at the end of sentences where appropriate. Use the citation number [X] format to reference the corresponding parts in your answer. If a sentence is derived from multiple contexts, list all relevant citation numbers, such as [3][5]. Be careful not to concentrate the citation numbers at the end of the response, but rather list them in the corresponding parts of the answer.
-When answering, please pay attention to the following points:
-
-- Today is {{CUR_DATE}}
-- The language of the answer should be consistent with the language of the user's message, unless the user explicitly indicates a different language for the response.
-- Not all content from the search results is closely related to the user's question; you need to discern and filter the search results based on the question.
-- For listing questions (e.g., listing all flight information), try to limit the answer to no more than 10 points and inform the user that they can check the search sources for complete information. Prioritize providing the most complete and relevant items; unless necessary, do not proactively inform the user that the search results did not provide certain content.
-- For creative questions (e.g., writing an essay), be sure to cite the corresponding reference numbers in the body of the paragraphs, such as [3][5], and not just at the end of the article. You need to interpret and summarize the user's topic requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are deeply thoughtful, creative, and professional. Your creative length should be as long as possible, and for each point, infer the user's intent, provide as many angles of response as possible, and ensure that the information is rich and the discussion is detailed.
-- If the answer is long, try to structure it and summarize it in paragraphs. If you need to answer in points, try to limit it to no more than 5 points and merge related content.
-- For objective questions, if the answer to the question is very brief, you can appropriately add one or two sentences of related information to enrich the content.
-- You need to choose an appropriate and aesthetically pleasing answer format based on the user's requirements and the content of the answer to ensure strong readability.
-- Your answer should synthesize multiple relevant web pages and not repeat citations from a single web page.
-- Use markdown to format paragraphs, lists, tables, and citations as much as possible.
-- Use markdown code blocks to write code, including syntax-highlighted languages.
-- Enclose all mathematical expressions in LaTeX. Always use double dollar signs $$, for example, $$x^4 = x - 3$$.
-- Do not include any URLs, only include citations with numbers, such as [1].
-- Do not include references (URLs, sources) at the end.
-- Use footnote citations at the end of applicable sentences (e.g., [1][2]).
-- Write more than 100 words (2 paragraphs).
-- Avoid directly quoting citations in the answer.
-
-# The user's message is:
-{{USER_QUERY}}
-  `
-
-const SEARCH_PROMPT_ARTIFACTS_TEMPLATE = `
-# The following content is based on the search results from the user's message:
-{{SEARCH_RESULTS}}
-In the search results I provided, each result is in the format [webpage X begin]...[webpage X end], where X represents the numerical index of each article. Please reference the context at the end of sentences where appropriate. Use the citation number [X] format to reference the corresponding parts in your answer. If a sentence is derived from multiple contexts, list all relevant citation numbers, such as [3][5]. Be careful not to concentrate the citation numbers at the end of the response, but rather list them in the corresponding parts of the answer.
-When answering, please pay attention to the following points:
-
-- Today is {{CUR_DATE}}
-- The language of the answer should be consistent with the language of the user's message, unless the user explicitly indicates a different language for the response.
-- Not all content from the search results is closely related to the user's question; you need to discern and filter the search results based on the question.
-- For listing questions (e.g., listing all flight information), try to limit the answer to no more than 10 points and inform the user that they can check the search sources for complete information. Prioritize providing the most complete and relevant items; unless necessary, do not proactively inform the user that the search results did not provide certain content.
-- For creative questions (e.g., writing an essay), be sure to cite the corresponding reference numbers in the body of the paragraphs, such as [3][5], and not just at the end of the article. You need to interpret and summarize the user's topic requirements, choose an appropriate format, fully utilize the search results, and extract important information to generate answers that meet the user's requirements, are deeply thoughtful, creative, and professional. Your creative length should be as long as possible, and for each point, infer the user's intent, provide as many angles of response as possible, and ensure that the information is rich and the discussion is detailed.
-- If the answer is long, try to structure it and summarize it in paragraphs. If you need to answer in points, try to limit it to no more than 5 points and merge related content.
-- For objective questions, if the answer to the question is very brief, you can appropriately add one or two sentences of related information to enrich the content.
-- You need to choose an appropriate and aesthetically pleasing answer format based on the user's requirements and the content of the answer to ensure strong readability.
-- Your answer should synthesize multiple relevant web pages and not repeat citations from a single web page.
-- Use markdown to format paragraphs, lists, tables, and citations as much as possible.
-- Use markdown code blocks to write code, including syntax-highlighted languages.
-- Enclose all mathematical expressions in LaTeX. Always use double dollar signs $$, for example, $$x^4 = x - 3$$.
-- Do not include any URLs, only include citations with numbers, such as [1].
-- Do not include references (URLs, sources) at the end.
-- Use footnote citations at the end of applicable sentences (e.g., [1][2]).
-- Write more than 100 words (2 paragraphs).
-- Avoid directly quoting citations in the answer.
-
-# Artifacts Support - MANDATORY FOR CERTAIN CONTENT TYPES
-You MUST use artifacts for specific types of content. This is not optional. Creating artifacts is required for the following content types:
-
-## REQUIRED ARTIFACT USE CASES (YOU MUST USE ARTIFACTS FOR THESE):
-1. Reports and documents:
-   - Annual reports, financial analyses, market research
-   - Academic papers, essays, articles
-   - Business plans, proposals, executive summaries
-   - Any document longer than 300 words
-   - Example requests: "Write a report on...", "Create an analysis of...", "Draft a document about..."
-
-2. Complete code implementations:
-   - Full code files or scripts (>15 lines)
-   - Complete functions or classes
-   - Configuration files
-   - Example requests: "Write a program that...", "Create a script for...", "Implement a class that..."
-
-3. Structured content:
-   - Tables with multiple rows/columns
-   - Diagrams, flowcharts, mind maps
-   - HTML pages or templates
-   - Example requests: "Create a diagram showing...", "Make a table of...", "Design an HTML page for..."
-
-## HOW TO CREATE ARTIFACTS:
-1. Identify if the user's request matches ANY of the required artifact use cases above
-2. Place the ENTIRE content within the artifact - do not split content between artifacts and your main response
-3. Use the appropriate artifact type:
-   - markdown: For reports, documents, articles, essays
-   - code: For programming code, scripts, configuration files
-   - HTML: For web pages
-   - SVG: For vector graphics
-   - mermaid: For diagrams and charts
-4. Give each artifact a clear, descriptive title
-5. Include complete content without truncation
-6. Still include citations [X] when referencing search results within artifacts
-
-## IMPORTANT RULES:
-- If the user asks for a report, document, essay, analysis, or any substantial written content, YOU MUST use a markdown artifact
-- In your main response, briefly introduce the artifact but put ALL the substantial content in the artifact
-- DO NOT fragment content between artifacts and your main response
-- For code solutions, put the COMPLETE implementation in the artifact
-- For documents or reports, the ENTIRE document should be in the artifact
-
-DO NOT use artifacts for:
-- Simple explanations or answers (less than 300 words)
-- Short code snippets (<15 lines)
-- Brief answers that work better as part of the conversation flow
-
-# The user's message is:
-{{USER_QUERY}}
-`
-
-// 格式化搜索结果的函数
-export function formatSearchResults(results: SearchResult[]): string {
-  return results
-    .map(
-      (result, index) => `[webpage ${index + 1} begin]
-title: ${result.title}
-URL: ${result.url}
-content：${result.content || ''}
-[webpage ${index + 1} end]`
-    )
-    .join('\n\n')
-}
-// 生成带搜索结果的提示词
-export function generateSearchPrompt(query: string, results: SearchResult[]): string {
-  if (results.length > 0) {
-    return SEARCH_PROMPT_TEMPLATE.replace('{{SEARCH_RESULTS}}', formatSearchResults(results))
-      .replace('{{USER_QUERY}}', query)
-      .replace('{{CUR_DATE}}', new Date().toLocaleDateString())
-  } else {
-    return query
-  }
-}
-
-// Add a function to generate search prompt with artifacts support
-export function generateSearchPromptWithArtifacts(query: string, results: SearchResult[]): string {
-  if (results.length > 0) {
-    return SEARCH_PROMPT_ARTIFACTS_TEMPLATE.replace(
-      '{{SEARCH_RESULTS}}',
-      formatSearchResults(results)
-    )
-      .replace('{{USER_QUERY}}', query)
-      .replace('{{CUR_DATE}}', new Date().toLocaleDateString())
-  } else {
-    return query
+  totalUsage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
   }
 }
 
@@ -217,10 +73,24 @@ export class ThreadPresenter implements IThreadPresenter {
     this.configPresenter = configPresenter
 
     // 初始化时处理所有未完成的消息
-    this.initializeUnfinishedMessages()
+    this.messageManager.initializeUnfinishedMessages()
 
     eventBus.on(STREAM_EVENTS.RESPONSE, async (msg) => {
-      const { eventId, content, reasoning_content } = msg
+      const {
+        eventId,
+        content,
+        reasoning_content,
+        tool_call_id,
+        tool_call_name,
+        tool_call_params,
+        tool_call_response,
+        maximum_tool_calls_reached,
+        tool_call_server_name,
+        tool_call_server_icons,
+        tool_call_server_description,
+        tool_call,
+        totalUsage
+      } = msg
       const state = this.generatingMessages.get(eventId)
       if (state) {
         // 记录第一个token的时间
@@ -229,6 +99,38 @@ export class ThreadPresenter implements IThreadPresenter {
           await this.messageManager.updateMessageMetadata(eventId, {
             firstTokenTime: Date.now() - state.startTime
           })
+        }
+        if (totalUsage) {
+          state.totalUsage = totalUsage
+          state.promptTokens = totalUsage.prompt_tokens
+        }
+
+        // 处理工具调用达到最大次数的情况
+        if (maximum_tool_calls_reached) {
+          const lastBlock = state.message.content[state.message.content.length - 1]
+          if (lastBlock) {
+            lastBlock.status = 'success'
+          }
+          state.message.content.push({
+            type: 'action',
+            content: 'common.error.maximumToolCallsReached',
+            status: 'success',
+            timestamp: Date.now(),
+            action_type: 'maximum_tool_calls_reached',
+            tool_call: {
+              id: tool_call_id,
+              name: tool_call_name,
+              params: tool_call_params,
+              server_name: tool_call_server_name,
+              server_icons: tool_call_server_icons,
+              server_description: tool_call_server_description
+            },
+            extra: {
+              needContinue: true
+            }
+          })
+          await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
+          return
         }
 
         // 处理reasoning_content的时间戳
@@ -243,7 +145,55 @@ export class ThreadPresenter implements IThreadPresenter {
         }
 
         const lastBlock = state.message.content[state.message.content.length - 1]
-        if (content) {
+
+        // 处理工具调用
+        if (tool_call) {
+          if (tool_call === 'start') {
+            // 创建新的工具调用块
+            if (lastBlock) {
+              lastBlock.status = 'success'
+            }
+
+            state.message.content.push({
+              type: 'tool_call',
+              content: '',
+              status: 'loading',
+              timestamp: Date.now(),
+              tool_call: {
+                id: tool_call_id,
+                name: tool_call_name,
+                params: tool_call_params || '',
+                server_name: tool_call_server_name,
+                server_icons: tool_call_server_icons,
+                server_description: tool_call_server_description
+              }
+            })
+          } else if (tool_call === 'end' || tool_call === 'error') {
+            // 查找对应的工具调用块
+            const toolCallBlock = state.message.content.find(
+              (block) =>
+                block.type === 'tool_call' &&
+                ((tool_call_id && block.tool_call?.id === tool_call_id) ||
+                  block.tool_call?.name === tool_call_name) &&
+                block.status === 'loading'
+            )
+
+            if (toolCallBlock && toolCallBlock.type === 'tool_call') {
+              if (tool_call === 'error') {
+                toolCallBlock.status = 'error'
+                toolCallBlock.tool_call.response = tool_call_response || '执行失败'
+              } else {
+                toolCallBlock.status = 'success'
+                if (tool_call_response) {
+                  toolCallBlock.tool_call.response = tool_call_response
+                }
+              }
+            }
+          }
+        }
+        // 处理内容
+        else if (content) {
+          // 处理普通内容
           if (lastBlock && lastBlock.type === 'content') {
             lastBlock.content += content
           } else {
@@ -258,6 +208,8 @@ export class ThreadPresenter implements IThreadPresenter {
             })
           }
         }
+
+        // 处理推理内容
         if (reasoning_content) {
           if (lastBlock && lastBlock.type === 'reasoning_content') {
             lastBlock.content += reasoning_content
@@ -273,6 +225,9 @@ export class ThreadPresenter implements IThreadPresenter {
             })
           }
         }
+
+        // 更新消息内容
+        await this.messageManager.editMessage(eventId, JSON.stringify(state.message.content))
       }
     })
     eventBus.on(STREAM_EVENTS.END, async (msg) => {
@@ -285,15 +240,27 @@ export class ThreadPresenter implements IThreadPresenter {
 
         // 计算completion tokens
         let completionTokens = 0
-        for (const block of state.message.content) {
-          if (block.type === 'content' || block.type === 'reasoning_content') {
-            completionTokens += approximateTokenSize(block.content)
+        console.log('state.totalUsage', state.totalUsage)
+        if (state.totalUsage) {
+          completionTokens = state.totalUsage.completion_tokens
+        } else {
+          for (const block of state.message.content) {
+            if (
+              block.type === 'content' ||
+              block.type === 'reasoning_content' ||
+              block.type === 'tool_call'
+            ) {
+              completionTokens += approximateTokenSize(block.content)
+            }
           }
         }
 
         // 检查是否有内容块
         const hasContentBlock = state.message.content.some(
-          (block) => block.type === 'content' || block.type === 'reasoning_content'
+          (block) =>
+            block.type === 'content' ||
+            block.type === 'reasoning_content' ||
+            block.type === 'tool_call'
         )
 
         // 如果没有内容块，添加错误信息
@@ -337,11 +304,12 @@ export class ThreadPresenter implements IThreadPresenter {
       const { eventId, error } = msg
       const state = this.generatingMessages.get(eventId)
       if (state) {
-        await this.handleMessageError(eventId, String(error))
+        await this.messageManager.handleMessageError(eventId, String(error))
         this.generatingMessages.delete(eventId)
       }
     })
   }
+
   setSearchAssistantModel(model: MODEL_META, providerId: string) {
     this.searchAssistantModel = model
     this.searchAssistantProviderId = providerId
@@ -376,74 +344,6 @@ export class ThreadPresenter implements IThreadPresenter {
     } catch (error) {
       console.error('设置搜索引擎失败:', error)
       return false
-    }
-  }
-
-  /**
-   * 处理消息错误状态的公共函数
-   * @param messageId 消息ID
-   * @param errorMessage 错误信息
-   */
-  private async handleMessageError(
-    messageId: string,
-    errorMessage: string = 'common.error.requestFailed'
-  ): Promise<void> {
-    const message = await this.messageManager.getMessage(messageId)
-    if (!message) {
-      return
-    }
-
-    let content: AssistantMessageBlock[] = []
-    try {
-      content = JSON.parse(message.content)
-    } catch (e) {
-      content = []
-    }
-
-    // 将所有loading状态的block改为error
-    content.forEach((block: AssistantMessageBlock) => {
-      if (block.status === 'loading') {
-        block.status = 'error'
-      }
-    })
-
-    // 添加错误信息block
-    content.push({
-      type: 'error',
-      content: errorMessage,
-      status: 'error',
-      timestamp: Date.now()
-    })
-
-    // 更新消息状态和内容
-    await this.messageManager.updateMessageStatus(messageId, 'error')
-    await this.messageManager.editMessage(messageId, JSON.stringify(content))
-  }
-
-  /**
-   * 初始化未完成的消息
-   */
-  private async initializeUnfinishedMessages(): Promise<void> {
-    try {
-      // 获取所有对话
-      const { list: conversations } = await this.getConversationList(1, 1000)
-
-      for (const conversation of conversations) {
-        // 获取每个对话的消息
-        const { list: messages } = await this.getMessages(conversation.id, 1, 1000)
-
-        // 找出所有pending状态的assistant消息
-        const pendingMessages = messages.filter(
-          (msg) => msg.role === 'assistant' && msg.status === 'pending'
-        )
-
-        // 处理每个未完成的消息
-        for (const message of pendingMessages) {
-          await this.handleMessageError(message.id, 'common.error.sessionInterrupted')
-        }
-      }
-    } catch (error) {
-      console.error('初始化未完成消息失败:', error)
     }
   }
 
@@ -522,7 +422,12 @@ export class ThreadPresenter implements IThreadPresenter {
     settings: Partial<CONVERSATION_SETTINGS>
   ): Promise<void> {
     const conversation = await this.getConversation(conversationId)
-    const mergedSettings = { ...conversation.settings, ...settings }
+    const mergedSettings = { ...conversation.settings }
+    for (const key in settings) {
+      if (settings[key] !== undefined) {
+        mergedSettings[key] = settings[key]
+      }
+    }
     console.log('updateConversationSettings', mergedSettings)
     // 检查是否有 modelId 的变化
     if (settings.modelId && settings.modelId !== conversation.settings.modelId) {
@@ -578,7 +483,14 @@ export class ThreadPresenter implements IThreadPresenter {
     if (messageCount < 2) {
       messageCount = 2
     }
-    return await this.messageManager.getContextMessages(conversationId, messageCount)
+    const messages = await this.messageManager.getContextMessages(conversationId, messageCount)
+
+    // 确保消息列表以用户消息开始
+    while (messages.length > 0 && messages[0].role !== 'user') {
+      messages.shift()
+    }
+
+    return messages
   }
 
   async clearContext(conversationId: string): Promise<void> {
@@ -752,8 +664,10 @@ export class ThreadPresenter implements IThreadPresenter {
     3. 编程相关查询：
         - 加上编程语言或框架名称
         - 指定错误代码或具体版本号
-    4. 保持查询简洁，通常不超过5-6个关键词
+    4. 保持查询简洁，通常不超过3个关键词, 最多不要超过5个关键词，参考当前搜索引擎的查询习惯书写关键字
     5. 默认保留用户的问题的语言，如果用户的问题是中文，则返回中文，如果用户的问题是英文，则返回英文，其他语言也一样
+    6. 如果用户的问题是关于某个具体的问题，则直接返回用户的问题，不要进行任何重写
+    7. 如果是你不了解的搜索引擎, 则直接返回用户的问题
 
     直接返回优化后的搜索词，不要有任何额外说明。
     如下是之前对话的上下文：
@@ -769,7 +683,7 @@ export class ThreadPresenter implements IThreadPresenter {
     if (!conversation) {
       return query
     }
-    // console.log('rewriteUserSearchQuery', query, contextMessages, conversation.id)
+    console.log('rewriteUserSearchQuery', query, contextMessages, conversation.id)
     const { providerId, modelId } = conversation.settings
     try {
       const rewrittenQuery = await this.llmProviderPresenter.generateCompletion(
@@ -782,7 +696,6 @@ export class ThreadPresenter implements IThreadPresenter {
         ],
         this.searchAssistantModel?.id || modelId
       )
-      console.log('rewriteUserSearchQuery', rewrittenQuery)
       return rewrittenQuery.trim() || query
     } catch (error) {
       console.error('重写搜索查询失败:', error)
@@ -835,15 +748,12 @@ export class ThreadPresenter implements IThreadPresenter {
     }
     state.message.content.unshift(searchBlock)
     await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
-
     // 标记消息为搜索状态
     state.isSearching = true
     this.searchingMessages.add(messageId)
-
     try {
       // 获取历史消息用于上下文
       const contextMessages = await this.getContextMessages(conversationId)
-
       // 检查是否已被取消
       this.throwIfCancelled(messageId)
 
@@ -851,28 +761,41 @@ export class ThreadPresenter implements IThreadPresenter {
         .map((msg) => {
           if (msg.role === 'user') {
             return `user: ${msg.content.text}${getFileContext(msg.content.files)}`
-          } else if (msg.role === 'ai') {
-            return `assistant: ${msg.content.blocks.map((block) => block.content).join('')}`
+          } else if (msg.role === 'assistant') {
+            let finanContent = 'assistant: '
+            msg.content.forEach((block) => {
+              if (block.type === 'content') {
+                finanContent += block.content + '\n'
+              }
+              if (block.type === 'search') {
+                finanContent += `search-result: ${JSON.stringify(block.extra)}`
+              }
+              if (block.type === 'tool_call') {
+                finanContent += `tool_call: ${JSON.stringify(block.tool_call)}`
+              }
+            })
+            return finanContent
           } else {
             return JSON.stringify(msg.content)
           }
         })
         .join('\n')
-
       // 检查是否已被取消
       this.throwIfCancelled(messageId)
 
       searchBlock.status = 'optimizing'
       await this.messageManager.editMessage(messageId, JSON.stringify(state.message.content))
-
+      console.log('optimizing')
       // 重写搜索查询
       const optimizedQuery = await this.rewriteUserSearchQuery(
         query,
         formattedContext,
         conversationId,
         this.searchManager.getActiveEngine().name
-      )
-
+      ).catch((err) => {
+        console.error('重写搜索查询失败:', err)
+        return query
+      })
       // 检查是否已被取消
       this.throwIfCancelled(messageId)
 
@@ -1040,7 +963,145 @@ export class ThreadPresenter implements IThreadPresenter {
       }
 
       console.error('流式生成过程中出错:', error)
-      await this.handleMessageError(state.message.id, String(error))
+      await this.messageManager.handleMessageError(state.message.id, String(error))
+      throw error
+    }
+  }
+  async continueStreamCompletion(conversationId: string, queryMsgId: string) {
+    const state = this.findGeneratingState(conversationId)
+    if (!state) {
+      console.warn('未找到状态，conversationId:', conversationId)
+      return
+    }
+
+    try {
+      // 设置消息未取消
+      state.isCancelled = false
+
+      // 1. 获取需要继续的消息
+      const queryMessage = await this.messageManager.getMessage(queryMsgId)
+      if (!queryMessage) {
+        throw new Error('找不到指定的消息')
+      }
+
+      // 2. 解析最后一个 action block
+      const content: AssistantMessageBlock[] = queryMessage.content
+      const lastActionBlock = content.filter((block) => block.type === 'action').pop()
+
+      if (!lastActionBlock || lastActionBlock.type !== 'action') {
+        throw new Error('找不到最后的 action block')
+      }
+
+      // 3. 检查是否是 maximum_tool_calls_reached
+      let toolCallResponse: { content: string } | null = null
+      const toolCall = lastActionBlock.tool_call
+
+      if (lastActionBlock.action_type === 'maximum_tool_calls_reached' && toolCall) {
+        // 设置 needContinue 为 0（false）
+        if (lastActionBlock.extra) {
+          lastActionBlock.extra = {
+            ...lastActionBlock.extra,
+            needContinue: false
+          }
+        }
+        await this.messageManager.editMessage(queryMsgId, JSON.stringify(content))
+
+        // 4. 检查工具调用参数
+        if (!toolCall.id || !toolCall.name || !toolCall.params) {
+          throw new Error('工具调用参数不完整')
+        }
+
+        // 5. 调用工具获取结果
+        toolCallResponse = await presenter.mcpPresenter.callTool({
+          id: toolCall.id,
+          type: 'function',
+          function: {
+            name: toolCall.name,
+            arguments: toolCall.params
+          },
+          server: {
+            name: toolCall.server_name || '',
+            icons: toolCall.server_icons || '',
+            description: toolCall.server_description || ''
+          }
+        })
+      }
+
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 6. 获取上下文信息
+      const { conversation, contextMessages, userMessage } = await this.prepareConversationContext(
+        conversationId,
+        state.message.id
+      )
+
+      // 检查是否已被取消
+      this.throwIfCancelled(state.message.id)
+
+      // 7. 准备提示内容
+      const { finalContent, promptTokens } = this.preparePromptContent(
+        conversation,
+        'continue',
+        contextMessages,
+        null, // 不进行搜索
+        [], // 没有 URL 结果
+        userMessage,
+        [] // 没有图片文件
+      )
+
+      // 8. 更新生成状态
+      await this.updateGenerationState(state, promptTokens)
+
+      // 9. 如果有工具调用结果，发送工具调用结果事件
+      if (toolCallResponse && toolCall) {
+        // console.log('toolCallResponse', toolCallResponse)
+        eventBus.emit(STREAM_EVENTS.RESPONSE, {
+          eventId: state.message.id,
+          content: '',
+          tool_call: 'start',
+          tool_call_id: toolCall.id,
+          tool_call_name: toolCall.name,
+          tool_call_params: toolCall.params,
+          tool_call_response: toolCallResponse.content,
+          tool_call_server_name: toolCall.server_name,
+          tool_call_server_icons: toolCall.server_icons,
+          tool_call_server_description: toolCall.server_description
+        })
+
+        eventBus.emit(STREAM_EVENTS.RESPONSE, {
+          eventId: state.message.id,
+          content: '',
+          tool_call: 'end',
+          tool_call_id: toolCall.id,
+          tool_call_response: toolCallResponse.content,
+          tool_call_name: toolCall.name,
+          tool_call_params: toolCall.params,
+          tool_call_server_name: toolCall.server_name,
+          tool_call_server_icons: toolCall.server_icons,
+          tool_call_server_description: toolCall.server_description
+        })
+      }
+
+      // 10. 启动流式生成
+      const { providerId, modelId, temperature, maxTokens } = conversation.settings
+      await this.llmProviderPresenter.startStreamCompletion(
+        providerId,
+        finalContent,
+        modelId,
+        state.message.id,
+        temperature,
+        maxTokens
+      )
+    } catch (error) {
+      // 检查是否是取消错误
+      if (String(error).includes('userCanceledGeneration')) {
+        console.log('消息生成已被用户取消')
+        return
+      }
+
+      console.error('继续生成过程中出错:', error)
+      await this.messageManager.handleMessageError(state.message.id, String(error))
       throw error
     }
   }
@@ -1066,7 +1127,6 @@ export class ThreadPresenter implements IThreadPresenter {
     const conversation = await this.getConversation(conversationId)
     let contextMessages: Message[] = []
     let userMessage: Message | null = null
-
     if (queryMsgId) {
       // 处理指定消息ID的情况
       const queryMessage = await this.getMessage(queryMsgId)
@@ -1141,11 +1201,12 @@ export class ThreadPresenter implements IThreadPresenter {
     const { systemPrompt, contextLength, artifacts } = conversation.settings
 
     // 计算搜索提示词和丰富用户消息
-    const searchPrompt = searchResults
-      ? artifacts === 1
-        ? generateSearchPromptWithArtifacts(userContent, searchResults)
-        : generateSearchPrompt(userContent, searchResults)
-      : ''
+    // const searchPrompt = searchResults
+    //   ? artifacts === 1
+    //     ? generateSearchPromptWithArtifacts(userContent, searchResults)
+    //     : generateSearchPrompt(userContent, searchResults)
+    //   : ''
+    const searchPrompt = searchResults ? generateSearchPrompt(userContent, searchResults) : ''
     const enrichedUserMessage =
       urlResults.length > 0
         ? '\n\n' + ContentEnricher.enrichUserMessageWithUrlContent(userContent, urlResults)
@@ -1262,10 +1323,11 @@ export class ThreadPresenter implements IThreadPresenter {
     }
 
     if (artifacts === 1) {
-      formattedMessages.push({
-        role: 'user',
-        content: ARTIFACTS_PROMPT
-      })
+      // formattedMessages.push({
+      //   role: 'user',
+      //   content: ARTIFACTS_PROMPT
+      // })
+      console.log('artifacts目前由mcp提供，此处为兼容性保留')
     }
 
     if (imageFiles.length > 0) {
@@ -1304,7 +1366,7 @@ export class ThreadPresenter implements IThreadPresenter {
         msg.role === 'user'
           ? `${msg.content.text}${getFileContext(msg.content.files)}`
           : msg.content
-              .filter((block) => block.type === 'content')
+              .filter((block) => block.type === 'content' || block.type === 'tool_call')
               .map((block) => block.content)
               .join('\n')
 

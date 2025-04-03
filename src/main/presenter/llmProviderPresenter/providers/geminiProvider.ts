@@ -1,11 +1,10 @@
 import { LLM_PROVIDER, MODEL_META, LLMResponse, LLMResponseStream } from '@shared/presenter'
-import { BaseLLMProvider, ChatMessage } from '../baseProvider'
+import { BaseLLMProvider, ChatMessage, ChatMessageContent } from '../baseProvider'
 import {
   GoogleGenerativeAI,
   GenerativeModel,
   Part,
   Content,
-  GenerateContentRequest,
   GenerationConfig
 } from '@google/generative-ai'
 import { ConfigPresenter } from '../../configPresenter'
@@ -36,6 +35,9 @@ export class GeminiProvider extends BaseLLMProvider {
         isCustom: false,
         contextLength: 2048576,
         maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false,
         description: 'Gemini 2.5 Pro Exp 03-05 模型'
       },
       {
@@ -46,6 +48,9 @@ export class GeminiProvider extends BaseLLMProvider {
         isCustom: false,
         contextLength: 1048576,
         maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false,
         description: 'Gemini 2.0 Flash 模型'
       },
       {
@@ -56,6 +61,9 @@ export class GeminiProvider extends BaseLLMProvider {
         isCustom: false,
         contextLength: 1048576,
         maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false,
         description: 'Gemini 2.0 Flash-Lite 模型（更轻量级）'
       },
       {
@@ -66,6 +74,9 @@ export class GeminiProvider extends BaseLLMProvider {
         isCustom: false,
         contextLength: 1048576,
         maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false,
         description: 'Gemini 1.5 Flash 模型（更快速、性价比更高）'
       },
       {
@@ -76,6 +87,9 @@ export class GeminiProvider extends BaseLLMProvider {
         isCustom: false,
         contextLength: 1048576,
         maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false,
         description: 'Gemini 1.5 Flash-8B 模型（8B 参数版本）'
       },
       {
@@ -86,6 +100,9 @@ export class GeminiProvider extends BaseLLMProvider {
         isCustom: false,
         contextLength: 2097152,
         maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false,
         description: 'Gemini 1.5 Pro 模型（更强大、支持多模态）'
       },
       {
@@ -95,7 +112,10 @@ export class GeminiProvider extends BaseLLMProvider {
         providerId: this.provider.id,
         isCustom: false,
         contextLength: 1048576,
-        maxTokens: 8192
+        maxTokens: 8192,
+        vision: true,
+        functionCall: true,
+        reasoning: false
       }
     ]
   }
@@ -161,6 +181,9 @@ export class GeminiProvider extends BaseLLMProvider {
             isCustom: false,
             contextLength: 2048576,
             maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false,
             description: 'Gemini 2.5 Pro Exp 03-05 模型'
           },
           {
@@ -171,6 +194,9 @@ export class GeminiProvider extends BaseLLMProvider {
             isCustom: false,
             contextLength: 1048576,
             maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false,
             description: 'Gemini 2.0 Flash 模型'
           },
           {
@@ -181,6 +207,9 @@ export class GeminiProvider extends BaseLLMProvider {
             isCustom: false,
             contextLength: 1048576,
             maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false,
             description: 'Gemini 2.0 Flash-Lite 模型（更轻量级）'
           },
           {
@@ -191,6 +220,9 @@ export class GeminiProvider extends BaseLLMProvider {
             isCustom: false,
             contextLength: 1048576,
             maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false,
             description: 'Gemini 1.5 Flash 模型（更快速、性价比更高）'
           },
           {
@@ -201,6 +233,9 @@ export class GeminiProvider extends BaseLLMProvider {
             isCustom: false,
             contextLength: 1048576,
             maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false,
             description: 'Gemini 1.5 Flash-8B 模型（8B 参数版本）'
           },
           {
@@ -211,6 +246,9 @@ export class GeminiProvider extends BaseLLMProvider {
             isCustom: false,
             contextLength: 2097152,
             maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false,
             description: 'Gemini 1.5 Pro 模型（更强大、支持多模态）'
           },
           {
@@ -220,7 +258,10 @@ export class GeminiProvider extends BaseLLMProvider {
             providerId: this.provider.id,
             isCustom: false,
             contextLength: 1048576,
-            maxTokens: 8192
+            maxTokens: 8192,
+            vision: true,
+            functionCall: true,
+            reasoning: false
           }
         ]
         await this.autoEnableModelsIfNeeded()
@@ -358,28 +399,85 @@ export class GeminiProvider extends BaseLLMProvider {
     temperature?: number,
     maxTokens?: number
   ): Promise<LLMResponse> {
-    if (!this.isInitialized) {
-      throw new Error('Provider not initialized')
-    }
-
-    if (!modelId) {
-      throw new Error('Model ID is required')
-    }
-
     try {
-      // 每次创建新的模型实例，并传入生成配置
-      const model = this.getModel(modelId, temperature, maxTokens)
-      const formattedParts = this.formatGeminiMessages(messages)
-      const generateContentParams = {
-        contents: formattedParts.contents
-      } as GenerateContentRequest
-      if (formattedParts.systemInstruction) {
-        generateContentParams.systemInstruction = formattedParts.systemInstruction
+      if (!this.genAI) {
+        throw new Error('Google Generative AI client is not initialized')
       }
-      const result = await model.generateContent(generateContentParams)
-      const text = result.response.text()
 
-      return this.processResponse(text)
+      const model = this.getModel(modelId, temperature, maxTokens)
+      const { systemInstruction, contents } = this.formatGeminiMessages(messages)
+
+      // 创建基本请求参数
+      const generationConfig: GenerationConfig = {
+        temperature: temperature || 0.7,
+        maxOutputTokens: maxTokens
+      }
+
+      // 执行请求
+      const result = await model.generateContent({
+        contents,
+        generationConfig,
+        systemInstruction
+      })
+
+      const response = result.response
+
+      const resultResp: LLMResponse = {
+        content: ''
+      }
+
+      // 尝试获取tokens信息 - Gemini API可能不提供标准的token计数
+      // 我们使用一个估算方法
+      try {
+        // 估算token数量 - 简单方法，可以根据实际需要调整
+        const promptText = messages.map((m) => m.content).join(' ')
+        const responseText = response.text()
+
+        // 简单估算: 英文约1个token/4个字符，中文约1个token/1.5个字符
+        const estimateTokens = (text: string): number => {
+          const chineseCharCount = (text.match(/[\u4e00-\u9fa5]/g) || []).length
+          const otherCharCount = text.length - chineseCharCount
+          return Math.ceil(chineseCharCount / 1.5 + otherCharCount / 4)
+        }
+
+        const promptTokens = estimateTokens(promptText)
+        const completionTokens = estimateTokens(responseText)
+
+        resultResp.totalUsage = {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens
+        }
+      } catch (e) {
+        console.warn('Failed to estimate token count for Gemini response', e)
+      }
+
+      // 获取文本响应
+      const text = response.text()
+
+      // 处理<think>标签
+      if (text.includes('<think>')) {
+        const thinkStart = text.indexOf('<think>')
+        const thinkEnd = text.indexOf('</think>')
+
+        if (thinkEnd > thinkStart) {
+          // 提取reasoning_content
+          resultResp.reasoning_content = text.substring(thinkStart + 7, thinkEnd).trim()
+
+          // 合并<think>前后的普通内容
+          const beforeThink = text.substring(0, thinkStart).trim()
+          const afterThink = text.substring(thinkEnd + 8).trim()
+          resultResp.content = [beforeThink, afterThink].filter(Boolean).join('\n')
+        } else {
+          // 如果没有找到配对的结束标签，将所有内容作为普通内容
+          resultResp.content = text
+        }
+      } else {
+        // 没有think标签，所有内容作为普通内容
+        resultResp.content = text
+      }
+
+      return resultResp
     } catch (error) {
       console.error('Gemini completions error:', error)
       throw error
@@ -537,9 +635,22 @@ export class GeminiProvider extends BaseLLMProvider {
 
       // 每次创建新的模型实例，并传入生成配置
       const model = this.getModel(modelId, temperature, maxTokens)
-
+      const totalUsage: {
+        prompt_tokens: number
+        completion_tokens: number
+        total_tokens: number
+      } = {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      }
       // 主循环，支持多轮工具调用
       while (true) {
+        const currentUsage = {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
+        }
         const formattedParts = this.formatGeminiMessages(conversationMessages)
 
         // 创建流式生成请求
@@ -577,9 +688,13 @@ export class GeminiProvider extends BaseLLMProvider {
 
         // 重置继续对话标志
         needContinueConversation = false
-
         for await (const chunk of result.stream) {
-          console.log('gchunk', chunk)
+          if (chunk.usageMetadata) {
+            currentUsage.prompt_tokens = chunk.usageMetadata.promptTokenCount
+            currentUsage.completion_tokens = chunk.usageMetadata.candidatesTokenCount
+            currentUsage.total_tokens = chunk.usageMetadata.totalTokenCount
+          }
+          // console.log('gchunk', chunk)
           // 检查是否包含函数调用
           // @ts-ignore - SDK类型定义不完整
           if (chunk.candidates && chunk.candidates[0]?.content?.parts?.[0]?.functionCall) {
@@ -669,21 +784,12 @@ export class GeminiProvider extends BaseLLMProvider {
             content
           }
         }
+        totalUsage.prompt_tokens += currentUsage.prompt_tokens
+        totalUsage.completion_tokens += currentUsage.completion_tokens
+        totalUsage.total_tokens += currentUsage.total_tokens
 
         // 处理函数调用
         if (functionCallDetected && functionName) {
-          // 增加工具调用计数
-          toolCallCount++
-
-          // 检查是否达到最大工具调用次数
-          if (toolCallCount >= MAX_TOOL_CALLS) {
-            yield {
-              content: `\n<maximum_tool_calls_reached count="${MAX_TOOL_CALLS}">\n`
-            }
-            needContinueConversation = false
-            break
-          }
-
           // 将Gemini函数调用转换为MCP工具调用
           const geminiFunctionCall = {
             name: functionName,
@@ -691,32 +797,110 @@ export class GeminiProvider extends BaseLLMProvider {
           }
 
           const mcpToolCall = await presenter.mcpPresenter.geminiFunctionCallToMcpTool(
-            mcpTools,
             geminiFunctionCall,
             this.provider.id
           )
 
           if (mcpToolCall) {
+            // 增加工具调用计数
+            toolCallCount++
+
+            // 检查是否达到最大工具调用次数
+            if (toolCallCount >= MAX_TOOL_CALLS) {
+              // 这里要用mcptool 格式化后的字段，因为continue的时候模型可能会变，其他地方要方便调试要用native 的tool描述
+              yield {
+                maximum_tool_calls_reached: true,
+                tool_call_id: mcpToolCall.id,
+                tool_call_name: mcpToolCall.function.name,
+                tool_call_params: mcpToolCall.function.arguments,
+                tool_call_server_name: mcpToolCall.server.name,
+                tool_call_server_icons: mcpToolCall.server.icons,
+                tool_call_server_description: mcpToolCall.server.description
+              }
+              needContinueConversation = false
+              break
+            }
             try {
               // 通知正在调用工具
+              const toolCallId = `gemini-${Date.now()}`
               yield {
-                content: `\n<tool_call name="${functionName}">\n`,
-                reasoning_content: undefined,
-                tool_calling_content: functionName
+                content: '',
+                tool_call: 'start',
+                tool_call_name: functionName,
+                tool_call_params: JSON.stringify(functionArgs),
+                tool_call_id: toolCallId,
+                tool_call_server_name: mcpToolCall.server.name,
+                tool_call_server_icons: mcpToolCall.server.icons,
+                tool_call_server_description: mcpToolCall.server.description
               }
 
               // 调用工具并获取响应
               const toolResponse = await presenter.mcpPresenter.callTool(mcpToolCall)
-              const responseContent =
-                typeof toolResponse.content === 'string'
-                  ? toolResponse.content
-                  : JSON.stringify(toolResponse.content)
 
-              // 通知工具响应结果
-              yield {
-                content: `\n<tool_response name="${functionName}">\n`,
-                reasoning_content: undefined,
-                tool_calling_content: functionName
+              // 处理响应内容，为多模态内容做特殊处理
+              let responseContent = ''
+              const messageParts: ChatMessageContent[] = []
+
+              // 根据内容类型进行不同处理
+              if (typeof toolResponse.rawData.content === 'string') {
+                // 字符串类型直接使用
+                responseContent = toolResponse.rawData.content
+                messageParts.push({ type: 'text', text: responseContent })
+              } else if (Array.isArray(toolResponse.rawData.content)) {
+                // 处理结构化内容数组
+                const contentParts: string[] = []
+
+                for (const item of toolResponse.rawData.content) {
+                  if (item.type === 'text') {
+                    contentParts.push(item.text)
+                    messageParts.push({ type: 'text', text: item.text })
+                  } else if (item.type === 'image') {
+                    // 为Gemini处理图片
+                    contentParts.push(`[图片内容]`)
+                    // 添加图片到消息部分，Gemini可以理解这种格式
+                    messageParts.push({
+                      type: 'image_url',
+                      image_url: {
+                        url: `data:${item.mimeType};base64,${item.data}`
+                      }
+                    })
+                  } else if (item.type === 'resource') {
+                    if ('text' in item.resource && item.resource.text) {
+                      contentParts.push(`[资源: ${item.resource.uri}]\n${item.resource.text}`)
+                      messageParts.push({
+                        type: 'text',
+                        text: `[资源: ${item.resource.uri}]\n${item.resource.text}`
+                      })
+                    } else if (
+                      'blob' in item.resource &&
+                      item.resource.mimeType?.startsWith('image/')
+                    ) {
+                      // 处理图片类型的二进制资源
+                      contentParts.push(`[图片资源: ${item.resource.uri}]`)
+                      messageParts.push({
+                        type: 'image_url',
+                        image_url: {
+                          url: `data:${item.resource.mimeType};base64,${item.resource.blob}`
+                        }
+                      })
+                    } else {
+                      contentParts.push(`[资源: ${item.resource.uri}]`)
+                      messageParts.push({ type: 'text', text: `[资源: ${item.resource.uri}]` })
+                    }
+                  } else {
+                    // 处理其他未知类型
+                    const itemStr = JSON.stringify(item)
+                    contentParts.push(itemStr)
+                    messageParts.push({ type: 'text', text: itemStr })
+                  }
+                }
+
+                // 合并所有文本内容用于显示
+                responseContent = contentParts.join('\n\n')
+              } else {
+                // 其他情况转为字符串
+                responseContent = JSON.stringify(toolResponse.content)
+                messageParts.push({ type: 'text', text: responseContent })
               }
 
               // 添加助手消息到上下文
@@ -725,17 +909,26 @@ export class GeminiProvider extends BaseLLMProvider {
                 content: currentContent || `我将使用${functionName}工具来回答你的问题。`
               } as ChatMessage)
 
-              // 添加工具结果到上下文
+              // 添加工具结果到上下文，使用多模态格式
               conversationMessages.push({
                 role: 'user',
-                content: `工具 ${functionName} 的调用结果：${responseContent}`
+                content:
+                  messageParts.length > 1
+                    ? messageParts
+                    : `工具 ${functionName} 的调用结果：${responseContent}`
               } as ChatMessage)
 
-              // 通知继续对话
+              // 通知工具调用结束
               yield {
-                content: `\n<tool_call_end name="${functionName}">\n`,
-                reasoning_content: undefined,
-                tool_calling_content: functionName
+                content: '',
+                tool_call: 'end',
+                tool_call_name: functionName,
+                tool_call_params: JSON.stringify(functionArgs),
+                tool_call_response: responseContent,
+                tool_call_id: toolCallId,
+                tool_call_server_name: mcpToolCall.server.name,
+                tool_call_server_icons: mcpToolCall.server.icons,
+                tool_call_server_description: mcpToolCall.server.description
               }
 
               // 设置需要继续对话的标志
@@ -745,9 +938,15 @@ export class GeminiProvider extends BaseLLMProvider {
               const errorMessage = error instanceof Error ? error.message : String(error)
 
               yield {
-                content: `\n<tool_call_error name="${functionName}" error="${errorMessage}">\n`,
-                reasoning_content: undefined,
-                tool_calling_content: errorMessage
+                content: '',
+                tool_call: 'error',
+                tool_call_name: functionName,
+                tool_call_params: JSON.stringify(functionArgs),
+                tool_call_response: errorMessage,
+                tool_call_id: `gemini-${Date.now()}`,
+                tool_call_server_name: mcpToolCall.server.name,
+                tool_call_server_icons: mcpToolCall.server.icons,
+                tool_call_server_description: mcpToolCall.server.description
               }
 
               // 添加错误消息到上下文
@@ -780,6 +979,9 @@ export class GeminiProvider extends BaseLLMProvider {
         if (!needContinueConversation || toolCallCount >= MAX_TOOL_CALLS) {
           break
         }
+      }
+      yield {
+        totalUsage: totalUsage
       }
     } catch (error) {
       console.error('Gemini stream completions error:', error)

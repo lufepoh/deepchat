@@ -32,6 +32,7 @@ export interface ModelConfig {
   temperature: number
   vision: boolean
   functionCall: boolean
+  reasoning: boolean
 }
 
 export interface IWindowPresenter {
@@ -115,10 +116,13 @@ export interface IPresenter {
   threadPresenter: IThreadPresenter
   devicePresenter: IDevicePresenter
   upgradePresenter: IUpgradePresenter
+  shortcutPresenter: IShortcutPresenter
   filePresenter: IFilePresenter
   mcpPresenter: IMCPPresenter
   syncPresenter: ISyncPresenter
-  // llamaCppPresenter: ILlamaCppPresenter
+  deeplinkPresenter: IDeeplinkPresenter
+  init(): void
+  destroy(): void
 }
 
 export interface IConfigPresenter {
@@ -133,7 +137,10 @@ export interface IConfigPresenter {
   getEnabledProviders(): LLM_PROVIDER[]
   getModelDefaultConfig(modelId: string): ModelConfig
   getAllEnabledModels(): Promise<{ providerId: string; models: RENDERER_MODEL_META[] }[]>
-
+  // 日志设置
+  getLoggingEnabled(): boolean
+  setLoggingEnabled(enabled: boolean): void
+  openLoggingFolder(): void
   // 自定义模型管理
   getCustomModels(providerId: string): MODEL_META[]
   setCustomModels(providerId: string, models: MODEL_META[]): void
@@ -175,8 +182,10 @@ export interface IConfigPresenter {
   // MCP配置相关方法
   getMcpServers(): Promise<Record<string, MCPServerConfig>>
   setMcpServers(servers: Record<string, MCPServerConfig>): Promise<void>
-  getMcpDefaultServer(): Promise<string>
-  setMcpDefaultServer(serverName: string): Promise<void>
+  getMcpDefaultServers(): Promise<string[]>
+  addMcpDefaultServer(serverName: string): Promise<void>
+  removeMcpDefaultServer(serverName: string): Promise<void>
+  toggleMcpDefaultServer(serverName: string): Promise<void>
   getMcpEnabled(): Promise<boolean>
   setMcpEnabled(enabled: boolean): Promise<void>
   addMcpServer(name: string, config: MCPServerConfig): Promise<void>
@@ -193,6 +202,9 @@ export type RENDERER_MODEL_META = {
   isCustom: boolean
   contextLength: number
   maxTokens: number
+  vision?: boolean
+  functionCall?: boolean
+  reasoning?: boolean
 }
 export type MODEL_META = {
   id: string
@@ -203,6 +215,9 @@ export type MODEL_META = {
   contextLength: number
   maxTokens: number
   description?: string
+  vision?: boolean
+  functionCall?: boolean
+  reasoning?: boolean
 }
 
 export type LLM_PROVIDER = {
@@ -369,6 +384,7 @@ export interface IThreadPresenter {
   setSearchAssistantModel(model: MODEL_META, providerId: string): void
   getMainMessageByParentId(conversationId: string, parentId: string): Promise<Message | null>
   destroy(): void
+  continueStreamCompletion(conversationId: string, queryMsgId: string): Promise<AssistantMessage>
 }
 
 export type MESSAGE_STATUS = 'sent' | 'pending' | 'error'
@@ -458,15 +474,40 @@ export type DiskInfo = {
 export type LLMResponse = {
   content: string
   reasoning_content?: string
-  tool_calling_content?: string
+  tool_call_name?: string
+  tool_call_params?: string
+  tool_call_response?: string
+  tool_call_id?: string
+  tool_call_server_name?: string
+  tool_call_server_icons?: string
+  tool_call_server_description?: string
+  maximum_tool_calls_reached?: boolean
+  totalUsage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
 }
 export type LLMResponseStream = {
   content?: string
   reasoning_content?: string
-  tool_calling_content?: string
   image_data?: {
     data: string
     mimeType: string
+  }
+  tool_call?: 'start' | 'end' | 'error'
+  tool_call_name?: string
+  tool_call_params?: string
+  tool_call_response?: string
+  tool_call_id?: string
+  tool_call_server_name?: string
+  tool_call_server_icons?: string
+  tool_call_server_description?: string
+  maximum_tool_calls_reached?: boolean
+  totalUsage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
   }
 }
 export interface IUpgradePresenter {
@@ -524,7 +565,7 @@ export interface IFilePresenter {
   readFile(relativePath: string): Promise<string>
   writeFile(operation: FileOperation): Promise<void>
   deleteFile(relativePath: string): Promise<void>
-  prepareFile(absPath: string): Promise<MessageFile>
+  prepareFile(absPath: string, typeInfo?: string): Promise<MessageFile>
   onFileRemoved(filePath: string): Promise<boolean>
 }
 
@@ -570,12 +611,12 @@ export interface MCPServerConfig {
   autoApprove: string[]
   disable?: boolean
   baseUrl?: string
-  type: 'sse' | 'stdio'
+  type: 'sse' | 'stdio' | 'inmemory'
 }
 
 export interface MCPConfig {
   mcpServers: Record<string, MCPServerConfig>
-  defaultServer: string
+  defaultServers: string[]
   mcpEnabled: boolean
 }
 
@@ -590,6 +631,11 @@ export interface MCPToolDefinition {
       required?: string[]
     }
   }
+  server: {
+    name: string
+    icons: string
+    description: string
+  }
 }
 
 export interface MCPToolCall {
@@ -599,18 +645,69 @@ export interface MCPToolCall {
     name: string
     arguments: string
   }
+  server: {
+    name: string
+    icons: string
+    description: string
+  }
 }
 
 export interface MCPToolResponse {
+  /** 工具调用的唯一标识符 */
   toolCallId: string
-  content: string
+
+  /**
+   * 工具调用的响应内容
+   * 可以是简单字符串或结构化内容数组
+   */
+  content: string | MCPContentItem[]
+
+  /** 可选的元数据 */
+  _meta?: Record<string, any>
+
+  /** 是否发生错误 */
+  isError?: boolean
+
+  /** 当使用兼容模式时，可能直接返回工具结果 */
+  toolResult?: unknown
+}
+
+/** 内容项类型 */
+export type MCPContentItem = MCPTextContent | MCPImageContent | MCPResourceContent
+
+/** 文本内容 */
+export interface MCPTextContent {
+  type: 'text'
+  text: string
+}
+
+/** 图像内容 */
+export interface MCPImageContent {
+  type: 'image'
+  data: string // Base64编码的图像数据
+  mimeType: string // 例如 "image/png", "image/jpeg" 等
+}
+
+/** 资源内容 */
+export interface MCPResourceContent {
+  type: 'resource'
+  resource: {
+    uri: string
+    mimeType?: string
+    /** 资源文本内容，与blob互斥 */
+    text?: string
+    /** 资源二进制内容，与text互斥 */
+    blob?: string
+  }
 }
 
 export interface IMCPPresenter {
   getMcpServers(): Promise<Record<string, MCPServerConfig>>
   getMcpClients(): Promise<McpClient[]>
-  getMcpDefaultServer(): Promise<string>
-  setMcpDefaultServer(serverName: string): Promise<void>
+  getMcpDefaultServers(): Promise<string[]>
+  addMcpDefaultServer(serverName: string): Promise<void>
+  removeMcpDefaultServer(serverName: string): Promise<void>
+  toggleMcpDefaultServer(serverName: string): Promise<void>
   addMcpServer(serverName: string, config: MCPServerConfig): Promise<void>
   updateMcpServer(serverName: string, config: Partial<MCPServerConfig>): Promise<void>
   removeMcpServer(serverName: string): Promise<void>
@@ -629,6 +726,31 @@ export interface IMCPPresenter {
   setMcpEnabled(enabled: boolean): Promise<void>
   getMcpEnabled(): Promise<boolean>
   resetToDefaultServers(): Promise<void>
+}
+
+export interface IDeeplinkPresenter {
+  /**
+   * 初始化 DeepLink 协议
+   */
+  init(): void
+
+  /**
+   * 处理 DeepLink 协议
+   * @param url DeepLink URL
+   */
+  handleDeepLink(url: string): Promise<void>
+
+  /**
+   * 处理 start 命令
+   * @param params URL 参数
+   */
+  handleStart(params: URLSearchParams): Promise<void>
+
+  /**
+   * 处理 mcp/install 命令
+   * @param params URL 参数
+   */
+  handleMcpInstall(params: URLSearchParams): Promise<void>
 }
 
 export interface ISyncPresenter {

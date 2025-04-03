@@ -73,7 +73,6 @@ import ModelSelect from './ModelSelect.vue'
 import ModelIcon from './icons/ModelIcon.vue'
 import { MODEL_META } from '@shared/presenter'
 import { onMounted, ref, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
 import { useChatStore } from '@/stores/chat'
 import { usePresenter } from '@/composables/usePresenter'
 const configPresenter = usePresenter('configPresenter')
@@ -111,22 +110,25 @@ const onSidebarButtonClick = () => {
   chatStore.isSidebarOpen = !chatStore.isSidebarOpen
 }
 
-// Create debounced update functions
-const debouncedUpdateConfig = useDebounceFn((config: Partial<typeof chatStore.chatConfig>) => {
-  chatStore.updateChatConfig(config)
-}, 500)
-
 // Watch for changes and update store
 watch(
   [temperature, contextLength, maxTokens, systemPrompt, artifacts],
   ([newTemp, newContext, newMaxTokens, newSystemPrompt, newArtifacts]) => {
-    debouncedUpdateConfig({
-      temperature: newTemp,
-      contextLength: newContext,
-      maxTokens: newMaxTokens,
-      systemPrompt: newSystemPrompt,
-      artifacts: newArtifacts
-    })
+    if (
+      newTemp !== chatStore.chatConfig.temperature ||
+      newContext !== chatStore.chatConfig.contextLength ||
+      newMaxTokens !== chatStore.chatConfig.maxTokens ||
+      newSystemPrompt !== chatStore.chatConfig.systemPrompt ||
+      newArtifacts !== chatStore.chatConfig.artifacts
+    ) {
+      chatStore.updateChatConfig({
+        temperature: newTemp,
+        contextLength: newContext,
+        maxTokens: newMaxTokens,
+        systemPrompt: newSystemPrompt,
+        artifacts: newArtifacts
+      })
+    }
   }
 )
 
@@ -139,15 +141,6 @@ watch(
     maxTokens.value = newConfig.maxTokens
     systemPrompt.value = newConfig.systemPrompt
     artifacts.value = newConfig.artifacts
-  },
-  { deep: true }
-)
-
-// Watch config changes and save to store
-watch(
-  () => chatStore.chatConfig,
-  async () => {
-    await chatStore.saveChatConfig()
   },
   { deep: true }
 )
@@ -173,7 +166,10 @@ const props = withDefaults(
 
 const modelSelectOpen = ref(false)
 const handleModelUpdate = (model: MODEL_META) => {
-  console.log('model', model)
+  chatStore.updateChatConfig({
+    modelId: model.id,
+    providerId: model.providerId
+  })
   modelSelectOpen.value = false
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,14 +15,23 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMcpStore } from '@/stores/mcp'
+import { useSettingsStore } from '@/stores/settings'
 import type { MCPServerConfig, MCPToolDefinition } from '@shared/presenter'
 import { useI18n } from 'vue-i18n'
 import McpServerForm from './mcpServerForm.vue'
+import { useToast } from '@/components/ui/toast'
+import { useRoute } from 'vue-router'
 
 // 使用MCP Store
 const mcpStore = useMcpStore()
+// 使用 Settings Store
+const settingsStore = useSettingsStore()
 // 国际化
 const { t } = useI18n()
+// Toast通知
+const { toast } = useToast()
+// 使用路由
+const route = useRoute()
 
 // 本地UI状态
 const activeTab = ref<'servers' | 'tools'>('servers')
@@ -85,6 +94,17 @@ const handleEditServer = async (serverName: string, serverConfig: Partial<MCPSer
 
 // 删除服务器
 const handleRemoveServer = async (serverName: string) => {
+  // 检查是否为inmemory服务，如果是则不允许删除
+  const config = mcpStore.config.mcpServers[serverName]
+  if (config?.type === 'inmemory') {
+    toast({
+      title: t('settings.mcp.cannotRemoveBuiltIn'),
+      description: t('settings.mcp.builtInServerCannotBeRemoved'),
+      variant: 'destructive'
+    })
+    return
+  }
+
   selectedServer.value = serverName
   isRemoveConfirmDialogOpen.value = true
 }
@@ -96,9 +116,29 @@ const confirmRemoveServer = async () => {
   isRemoveConfirmDialogOpen.value = false
 }
 
-// 设置默认服务器
-const handleSetDefaultServer = async (serverName: string) => {
-  await mcpStore.setDefaultServer(serverName)
+// 切换服务器的默认状态
+const handleToggleDefaultServer = async (serverName: string) => {
+  // 检查是否已经是默认服务器
+  const isDefault = mcpStore.config.defaultServers.includes(serverName)
+
+  // 如果不是默认服务器，且已达到最大数量，显示提示
+  if (!isDefault && mcpStore.config.defaultServers.length >= 3) {
+    toast({
+      title: t('settings.mcp.maxDefaultServersReached'),
+      description: t('settings.mcp.removeDefaultFirst'),
+      variant: 'destructive'
+    })
+    return
+  }
+
+  const result = await mcpStore.toggleDefaultServer(serverName)
+  if (!result.success) {
+    toast({
+      title: t('common.error.operationFailed'),
+      description: result.message,
+      variant: 'destructive'
+    })
+  }
 }
 
 // 启动/停止服务器
@@ -158,20 +198,63 @@ const callTool = async (toolName: string) => {
 }
 
 // 监听标签切换
-watch(activeTab, async (newTab) => {
-  if (newTab === 'tools') {
-    await mcpStore.loadTools()
-    await mcpStore.loadClients()
+watch(
+  activeTab,
+  async (newTab) => {
+    if (newTab === 'tools') {
+      await mcpStore.loadTools()
+      await mcpStore.loadClients()
+    }
+  },
+  { immediate: true }
+)
+
+// 计算属性：区分内置服务和普通服务
+const inMemoryServers = computed(() => {
+  return mcpStore.serverList.filter((server) => {
+    const config = mcpStore.config.mcpServers[server.name]
+    return config?.type === 'inmemory'
+  })
+})
+
+const regularServers = computed(() => {
+  return mcpStore.serverList.filter((server) => {
+    const config = mcpStore.config.mcpServers[server.name]
+    return config?.type !== 'inmemory'
+  })
+})
+
+// 监听 MCP 安装缓存
+watch(
+  () => settingsStore.mcpInstallCache,
+  (newCache) => {
+    if (newCache) {
+      // 打开添加服务器对话框
+      isAddServerDialogOpen.value = true
+    }
+  },
+  { immediate: true }
+)
+
+watch(isAddServerDialogOpen, (newIsAddServerDialogOpen) => {
+  // 当添加服务器对话框关闭时，清理缓存
+  if (!newIsAddServerDialogOpen) {
+    // 清理缓存
+    settingsStore.clearMcpInstallCache()
   }
 })
 
-// 生命周期钩子
-onMounted(async () => {
-  if (activeTab.value === 'tools') {
-    await mcpStore.loadTools()
-    await mcpStore.loadClients()
-  }
-})
+// 监听URL查询参数，设置活动标签页
+watch(
+  () => route.query.subtab,
+  (newSubtab) => {
+    console.log('newSubtab', newSubtab)
+    if (newSubtab === 'servers' || newSubtab === 'tools') {
+      activeTab.value = newSubtab
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -244,7 +327,10 @@ onMounted(async () => {
                 <DialogHeader class="px-4 flex-shrink-0">
                   <DialogTitle>{{ t('settings.mcp.addServerDialog.title') }}</DialogTitle>
                 </DialogHeader>
-                <McpServerForm @submit="handleAddServer" />
+                <McpServerForm
+                  @submit="handleAddServer"
+                  :default-json-config="settingsStore.mcpInstallCache || undefined"
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -262,8 +348,162 @@ onMounted(async () => {
         </div>
 
         <div v-else class="space-y-4 pb-4">
+          <!-- 内置服务 -->
+          <div v-if="inMemoryServers.length > 0">
+            <h4 class="text-sm font-medium mb-2 text-muted-foreground">
+              {{ t('settings.mcp.builtInServers') }}
+            </h4>
+            <div
+              v-for="server in inMemoryServers"
+              :key="server.name"
+              class="border rounded-lg overflow-hidden bg-card mb-4"
+            >
+              <div class="flex items-center p-4">
+                <div class="flex-1">
+                  <div>
+                    <div class="flex items-center">
+                      <span class="text-xl mr-2">{{ server.icons }}</span>
+                      <h4 class="text-sm font-medium">{{ server.name }}</h4>
+                      <span
+                        :class="[
+                          'ml-2 px-2 py-0.5 text-xs rounded-full',
+                          server.isRunning
+                            ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100'
+                        ]"
+                      >
+                        {{
+                          server.isRunning ? t('settings.mcp.running') : t('settings.mcp.stopped')
+                        }}
+                      </span>
+                    </div>
+                    <p class="text-xs text-muted-foreground mt-1">{{ server.descriptions }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          class="h-8 w-8 rounded-lg text-muted-foreground"
+                          :disabled="mcpStore.configLoading"
+                          @click="handleToggleServer(server.name)"
+                        >
+                          <Icon
+                            v-if="mcpStore.serverLoadingStates[server.name]"
+                            icon="lucide:loader"
+                            class="h-4 w-4 animate-spin"
+                          />
+                          <Icon
+                            v-else
+                            :icon="server.isRunning ? 'lucide:square' : 'lucide:play'"
+                            class="h-4 w-4"
+                          />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          {{
+                            server.isRunning
+                              ? t('settings.mcp.stopServer')
+                              : t('settings.mcp.startServer')
+                          }}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          class="h-8 w-8 rounded-lg"
+                          :class="
+                            server.isDefault
+                              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                              : 'text-muted-foreground'
+                          "
+                          :disabled="mcpStore.configLoading"
+                          @click="handleToggleDefaultServer(server.name)"
+                        >
+                          <Icon
+                            v-if="server.isDefault"
+                            icon="lucide:check-circle"
+                            class="h-4 w-4"
+                          />
+                          <Icon v-else icon="lucide:circle" class="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          {{
+                            server.isDefault
+                              ? t('settings.mcp.removeDefault')
+                              : t('settings.mcp.setAsDefault')
+                          }}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          class="h-8 w-8 rounded-lg text-muted-foreground"
+                          :disabled="mcpStore.configLoading"
+                          @click="openEditServerDialog(server.name)"
+                        >
+                          <Icon icon="lucide:edit" class="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{{ t('settings.mcp.editServer') }}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+              <div class="bg-muted dark:bg-zinc-800 px-4 py-2">
+                <div class="flex justify-between items-center">
+                  <div class="text-xs font-mono overflow-x-auto whitespace-nowrap">
+                    {{ server.command }} {{ server.args.join(' ') }}
+                  </div>
+                  <div class="flex space-x-2">
+                    <span
+                      class="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 rounded-full shrink-0"
+                    >
+                      {{ t('settings.mcp.builtIn') }}
+                    </span>
+                    <span
+                      v-if="server.isDefault"
+                      class="ml-2 px-2 py-0.5 text-xs bg-primary text-primary-foreground rounded-full shrink-0"
+                    >
+                      {{ t('settings.mcp.default') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 普通服务标题 -->
+            <h4
+              v-if="regularServers.length > 0"
+              class="text-sm font-medium mb-2 mt-6 text-muted-foreground"
+            >
+              {{ t('settings.mcp.customServers') }}
+            </h4>
+          </div>
+
+          <!-- 普通服务 -->
           <div
-            v-for="server in mcpStore.serverList"
+            v-for="server in regularServers"
             :key="server.name"
             class="border rounded-lg overflow-hidden bg-card"
           >
@@ -328,15 +568,27 @@ onMounted(async () => {
                       <Button
                         variant="outline"
                         size="icon"
-                        class="h-8 w-8 rounded-lg text-muted-foreground"
-                        :disabled="server.isDefault || mcpStore.configLoading"
-                        @click="handleSetDefaultServer(server.name)"
+                        class="h-8 w-8 rounded-lg"
+                        :class="
+                          server.isDefault
+                            ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                            : 'text-muted-foreground'
+                        "
+                        :disabled="mcpStore.configLoading"
+                        @click="handleToggleDefaultServer(server.name)"
                       >
-                        <Icon icon="lucide:check-circle" class="h-4 w-4" />
+                        <Icon v-if="server.isDefault" icon="lucide:check-circle" class="h-4 w-4" />
+                        <Icon v-else icon="lucide:circle" class="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>{{ t('settings.mcp.setAsDefault') }}</p>
+                      <p>
+                        {{
+                          server.isDefault
+                            ? t('settings.mcp.removeDefault')
+                            : t('settings.mcp.setAsDefault')
+                        }}
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

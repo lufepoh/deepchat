@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,7 @@ const props = defineProps<{
   serverName?: string
   initialConfig?: MCPServerConfig
   editMode?: boolean
+  defaultJsonConfig?: string
 }>()
 
 const emit = defineEmits<{
@@ -38,8 +39,13 @@ const args = ref(props.initialConfig?.args?.join(' ') || '')
 const env = ref(JSON.stringify(props.initialConfig?.env || {}, null, 2))
 const descriptions = ref(props.initialConfig?.descriptions || '')
 const icons = ref(props.initialConfig?.icons || '📁')
-const type = ref<'sse' | 'stdio'>(props.initialConfig?.type || 'stdio')
+const type = ref<'sse' | 'stdio' | 'inmemory'>(props.initialConfig?.type || 'stdio')
 const baseUrl = ref(props.initialConfig?.baseUrl || '')
+
+// 判断是否是inmemory类型
+const isInMemoryType = computed(() => type.value === 'inmemory')
+// 判断字段是否只读(inmemory类型除了args和env外都是只读的)
+const isFieldReadOnly = computed(() => props.editMode && isInMemoryType.value)
 
 // 权限设置
 const autoApproveAll = ref(props.initialConfig?.autoApprove?.includes('all') || false)
@@ -96,7 +102,14 @@ const parseJsonConfig = () => {
     descriptions.value = serverConfig.descriptions || ''
     icons.value = serverConfig.icons || '📁'
     type.value = serverConfig.type || 'stdio'
-    baseUrl.value = serverConfig.baseUrl || ''
+    baseUrl.value = serverConfig.url || ''
+    if (type.value !== 'stdio' && type.value !== 'sse') {
+      if (baseUrl.value) {
+        type.value = 'sse'
+      } else {
+        type.value = 'stdio'
+      }
+    }
 
     // 权限设置
     autoApproveAll.value = serverConfig.autoApprove?.includes('all') || false
@@ -117,6 +130,7 @@ const parseJsonConfig = () => {
       description: t('settings.mcp.serverForm.configImported')
     })
   } catch (error) {
+    console.error('解析JSON配置失败:', error)
     toast({
       title: t('settings.mcp.serverForm.parseError'),
       description: error instanceof Error ? error.message : String(error),
@@ -234,9 +248,25 @@ const placeholder = `mcp配置示例
         "-y",
         ...
       ]
+    },
+    "sseServer":{
+      "url": "https://your-sse-server-url"
     }
-  }
+  },
+
 }`
+
+// 监听 defaultJsonConfig 变化
+watch(
+  () => props.defaultJsonConfig,
+  (newConfig) => {
+    if (newConfig) {
+      jsonConfig.value = newConfig
+      parseJsonConfig()
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -280,7 +310,7 @@ const placeholder = `mcp配置示例
             id="server-name"
             v-model="name"
             :placeholder="t('settings.mcp.serverForm.namePlaceholder')"
-            :disabled="editMode"
+            :disabled="editMode || isFieldReadOnly"
             required
           />
         </div>
@@ -291,7 +321,7 @@ const placeholder = `mcp配置示例
             t('settings.mcp.serverForm.icons')
           }}</Label>
           <div class="flex items-center space-x-2">
-            <EmojiPicker v-model="icons" />
+            <EmojiPicker v-model="icons" :disabled="isFieldReadOnly" />
           </div>
         </div>
 
@@ -300,13 +330,18 @@ const placeholder = `mcp配置示例
           <Label class="text-xs text-muted-foreground" for="server-type">{{
             t('settings.mcp.serverForm.type')
           }}</Label>
-          <Select v-model="type">
+          <Select v-model="type" :disabled="isFieldReadOnly">
             <SelectTrigger class="w-full">
               <SelectValue :placeholder="t('settings.mcp.serverForm.typePlaceholder')" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="stdio">{{ t('settings.mcp.serverForm.typeStdio') }}</SelectItem>
               <SelectItem value="sse">{{ t('settings.mcp.serverForm.typeSse') }}</SelectItem>
+              <SelectItem
+                value="inmemory"
+                v-if="props.editMode && props.initialConfig?.type === 'inmemory'"
+                >{{ t('settings.mcp.serverForm.typeInMemory') }}</SelectItem
+              >
             </SelectContent>
           </Select>
         </div>
@@ -320,6 +355,7 @@ const placeholder = `mcp配置示例
             id="server-base-url"
             v-model="baseUrl"
             :placeholder="t('settings.mcp.serverForm.baseUrlPlaceholder')"
+            :disabled="isFieldReadOnly"
             required
           />
         </div>
@@ -333,12 +369,13 @@ const placeholder = `mcp配置示例
             id="server-command"
             v-model="command"
             :placeholder="t('settings.mcp.serverForm.commandPlaceholder')"
+            :disabled="isFieldReadOnly"
             required
           />
         </div>
 
         <!-- 参数 -->
-        <div class="space-y-2" v-if="showCommandFields">
+        <div class="space-y-2" v-if="showCommandFields || isInMemoryType">
           <Label class="text-xs text-muted-foreground" for="server-args">{{
             t('settings.mcp.serverForm.args')
           }}</Label>
@@ -350,7 +387,7 @@ const placeholder = `mcp配置示例
         </div>
 
         <!-- 环境变量 -->
-        <div class="space-y-2" v-if="showCommandFields">
+        <div class="space-y-2" v-if="showCommandFields || isInMemoryType">
           <Label class="text-xs text-muted-foreground" for="server-env">{{
             t('settings.mcp.serverForm.env')
           }}</Label>
@@ -372,6 +409,7 @@ const placeholder = `mcp配置示例
             id="server-description"
             v-model="descriptions"
             :placeholder="t('settings.mcp.serverForm.descriptionsPlaceholder')"
+            :disabled="isFieldReadOnly"
           />
         </div>
 
