@@ -1,5 +1,6 @@
 import { clipboard, contextBridge, nativeImage, webUtils } from 'electron'
 import { exposeElectronAPI } from '@electron-toolkit/preload'
+import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
 const api = {
@@ -21,11 +22,20 @@ exposeElectronAPI()
 // just add to the DOM global.
 if (process.contextIsolated) {
   try {
+    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
+    contextBridge.exposeInMainWorld('speechRecognition', {
+      isSupported: () => {
+        return typeof window !== 'undefined' && 
+          (window.SpeechRecognition || window.webkitSpeechRecognition)
+      }
+    })
   } catch (error) {
     console.error(error)
   }
 } else {
+  // @ts-ignore (define in dts)
+  window.electron = electronAPI
   // @ts-ignore (define in dts)
   window.api = api
 }

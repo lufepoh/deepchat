@@ -17,6 +17,21 @@
         <span class="sr-only">Chat</span>
       </Button>
 
+      <!-- Voice Section (음성 탭 버튼 추가) -->
+      <Button
+        variant="ghost"
+        size="icon"
+        class="rounded-lg w-9 h-9"
+        :class="{ 'bg-accent': modelValue === 'voice' }"
+        @click="$emit('update:modelValue', 'voice')"
+      >
+        <Icon
+          icon="lucide:mic"
+          :class="['h-5 w-5', modelValue === 'voice' ? ' text-primary' : 'text-muted-foreground']"
+        />
+        <span class="sr-only">Voice</span>
+      </Button>
+
       <!-- Settings Section -->
 
       <Button

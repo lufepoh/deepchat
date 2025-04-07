@@ -77,7 +77,26 @@ export class WindowPresenter implements IWindowPresenter {
       webPreferences: {
         preload: join(__dirname, '../preload/index.mjs'),
         sandbox: false,
-        devTools: is.dev
+        devTools: is.dev,
+        nodeIntegration: true,
+        contextIsolation: true,
+        webSecurity: true,
+        // 마이크 및 미디어 접근 허용
+        defaultFontFamily: {
+          standard: 'Arial',
+          serif: 'Times New Roman',
+          sansSerif: 'Arial',
+          monospace: 'Courier New'
+        },
+        // 미디어 권한 설정
+        permissions: {
+          media: true,
+          geolocation: false,
+          notifications: false,
+          midi: false,
+          pointerLock: false,
+          fullscreen: true
+        }
       },
       frame: false
     })
