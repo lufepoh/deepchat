@@ -71,6 +71,15 @@ const router = createRouter({
           }
         },
         {
+          path: 'docker',
+          name: 'settings-docker',
+          component: () => import('@/components/settings/DockerSettings.vue'),
+          meta: {
+            titleKey: 'routes.settings-docker',
+            icon: 'lucide:container'
+          }
+        },
+        {
           path: 'database',
           name: 'settings-database',
           component: () => import('@/components/settings/DataSettings.vue'),

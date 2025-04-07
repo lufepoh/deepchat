@@ -165,7 +165,8 @@
     "vite": "^5.4.14",
     "vite-plugin-vue-devtools": "^7.7.1",
     "vue": "^3.5.13",
-    "vue-tsc": "^2.2.0"
+    "vue-tsc": "^2.2.0",
+    "@paralleldrive/cuid2": "^2.2.2"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -7,6 +7,7 @@ import fs from 'fs'
 import { eventBus } from './eventbus'
 import { WINDOW_EVENTS } from './events'
 import { setLoggingEnabled } from '@shared/logger'
+import { initDocker } from './docker'
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 app.commandLine.appendSwitch('webrtc-max-cpu-consumption-percentage', '100')
@@ -40,6 +41,9 @@ app.whenReady().then(() => {
   const proxyMode = presenter.configPresenter.getProxyMode() as ProxyMode
   const customProxyUrl = presenter.configPresenter.getCustomProxyUrl()
   proxyConfig.initFromConfig(proxyMode as ProxyMode, customProxyUrl)
+
+  // Docker 초기화
+  initDocker()
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

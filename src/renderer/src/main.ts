@@ -18,11 +18,16 @@ const i18n = createI18n({
 // 添加整个图标集合到本地
 addCollection(lucideIcons)
 addCollection(vscodeIcons)
-const pinia = createPinia()
 
-const app = createApp(App)
+// Main Vue app
+async function setupVueApp() {
+  const app = createApp(App)
+  const pinia = createPinia()
+  app.use(pinia)
+  
+  app.use(router)
+  app.use(i18n)
+  app.mount('#app')
+}
 
-app.use(pinia)
-app.use(router)
-app.use(i18n)
-app.mount('#app')
+setupVueApp()
