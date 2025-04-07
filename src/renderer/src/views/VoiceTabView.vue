@@ -54,15 +54,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import Button from '@/components/ui/button/Button.vue'
-import { useMcpStore } from '@/stores/mcp'
 
 const isListening = ref(false)
 const isMicAvailable = ref(false)
 const isServerReady = ref(false)
 const transcription = ref('')
+
+// WebSocket 연결
+const controlWs = ref<WebSocket | null>(null)
+const dataWs = ref<WebSocket | null>(null)
+
+// 연결 상태 추적
+const isConnecting = ref(false)
 
 // 오디오 처리 관련 변수
 const audioContext = ref<AudioContext | null>(null)
@@ -76,13 +82,6 @@ const canvasCtx = ref<CanvasRenderingContext2D | null>(null)
 const canvasWidth = 600
 const canvasHeight = 200
 
-const mcpStore = useMcpStore()
-
-// MCP 서버 상태 감시
-watch(() => mcpStore.serverStatuses['voice-server'], (status) => {
-  isServerReady.value = !!status
-})
-
 const checkMicrophonePermission = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -94,49 +93,85 @@ const checkMicrophonePermission = async () => {
   }
 }
 
-const initAudioContext = async () => {
-  try {
-    audioContext.value = new AudioContext()
-    
-    // AudioWorklet 코드를 Blob으로 변환하여 URL 생성
-    const workletCode = `
-      class AudioProcessor extends AudioWorkletProcessor {
-        process(inputs, outputs, parameters) {
-          const input = inputs[0]
-          if (!input || !input[0]) return true
-      
-          // 입력 데이터를 16비트 PCM으로 변환
-          const pcmData = new Int16Array(input[0].length)
-          for (let i = 0; i < input[0].length; i++) {
-            const s = Math.max(-1, Math.min(1, input[0][i]))
-            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
-          }
-      
-          // 메인 스레드로 PCM 데이터 전송
-          this.port.postMessage({
-            pcmData: pcmData,
-            timeStamp: currentFrame
-          })
-      
-          return true
-        }
-      }
-      
-      registerProcessor('audio-processor', AudioProcessor)
-    `
-    const blob = new Blob([workletCode], { type: 'application/javascript' })
-    const workletUrl = URL.createObjectURL(blob)
+const closeWebSocketConnections = () => {
+  if (controlWs.value) {
+    controlWs.value.close()
+    controlWs.value = null
+  }
+  if (dataWs.value) {
+    dataWs.value.close()
+    dataWs.value = null
+  }
+  isServerReady.value = false
+}
 
-    // AudioWorklet 프로세서 로드
-    await audioContext.value.audioWorklet.addModule(workletUrl)
-    
-    // Blob URL 정리
-    URL.revokeObjectURL(workletUrl)
-    
-    return true
+const checkServerStatus = async () => {
+  // 이미 연결 중이거나 연결된 상태라면 리턴
+  if (isConnecting.value || (controlWs.value?.readyState === WebSocket.OPEN && dataWs.value?.readyState === WebSocket.OPEN)) {
+    return
+  }
+
+  // 기존 연결이 있다면 정리
+  closeWebSocketConnections()
+  
+  try {
+    isConnecting.value = true
+
+    // WebSocket 연결 시도
+    controlWs.value = new WebSocket('ws://localhost:8011')
+    dataWs.value = new WebSocket('ws://localhost:8012')
+
+    // 제어 WebSocket 이벤트 핸들러
+    controlWs.value.onopen = () => {
+      console.log('제어 WebSocket 연결됨')
+      if (dataWs.value?.readyState === WebSocket.OPEN) {
+        isServerReady.value = true
+      }
+    }
+
+    controlWs.value.onclose = () => {
+      console.log('제어 WebSocket 연결 끊김')
+      isServerReady.value = false
+    }
+
+    controlWs.value.onerror = (error) => {
+      console.error('제어 WebSocket 오류:', error)
+      isServerReady.value = false
+    }
+
+    // 데이터 WebSocket 이벤트 핸들러
+    dataWs.value.onopen = () => {
+      console.log('데이터 WebSocket 연결됨')
+      if (controlWs.value?.readyState === WebSocket.OPEN) {
+        isServerReady.value = true
+      }
+    }
+
+    dataWs.value.onmessage = (event) => {
+      try {
+        const response = JSON.parse(event.data)
+        if (response.type === 'realtime') {
+          transcription.value = response.text
+        }
+      } catch (e) {
+        console.error('음성 인식 결과 파싱 실패:', e)
+      }
+    }
+
+    dataWs.value.onclose = () => {
+      console.log('데이터 WebSocket 연결 끊김')
+      isServerReady.value = false
+    }
+
+    dataWs.value.onerror = (error) => {
+      console.error('데이터 WebSocket 오류:', error)
+      isServerReady.value = false
+    }
   } catch (error) {
-    console.error('AudioContext 초기화 오류:', error)
-    return false
+    console.error('서버 연결 실패:', error)
+    isServerReady.value = false
+  } finally {
+    isConnecting.value = false
   }
 }
 
@@ -169,10 +204,8 @@ const startListening = async () => {
       // 시각화
       drawWaveform(newPcmData)
       
-      // MCP 서버로 전송
-      if (mcpStore.mcpEnabled) {
-        sendAudioToMCP()
-      }
+      // 서버로 전송
+      sendAudioToServer(newPcmData)
     }
 
     // 오디오 노드 연결
@@ -247,23 +280,78 @@ const drawWaveform = (audioBuffer: Int16Array) => {
   canvasCtx.value.stroke()
 }
 
-const sendAudioToMCP = async () => {
-  if (!mcpStore.mcpEnabled || !isServerReady.value) return
+const sendAudioToServer = async (pcmData: Int16Array) => {
+  if (!isServerReady.value || !dataWs.value) return
 
   try {
-    const result = await mcpStore.callTool('processAudio')
-    if (result && typeof result === 'object' && 'content' in result) {
-      try {
-        const response = JSON.parse(result.content)
-        if (response.type === 'realtime') {
-          transcription.value = response.text
-        }
-      } catch (e) {
-        console.error('음성 인식 결과 파싱 실패:', e)
-      }
+    // 메타데이터 생성
+    const metadata = {
+      sampleRate: audioContext.value?.sampleRate || 16000
     }
+    const metadataJson = JSON.stringify(metadata)
+    const metadataBytes = new TextEncoder().encode(metadataJson)
+    
+    // 메타데이터 길이를 4바이트로 인코딩
+    const lengthBytes = new Uint8Array(4)
+    const view = new DataView(lengthBytes.buffer)
+    view.setInt32(0, metadataBytes.length, true)
+    
+    // 메시지 조합: 메타데이터 길이(4바이트) + 메타데이터(JSON) + PCM 데이터
+    const message = new Uint8Array(4 + metadataBytes.length + pcmData.length * 2)
+    message.set(lengthBytes)
+    message.set(metadataBytes, 4)
+    message.set(new Uint8Array(pcmData.buffer), 4 + metadataBytes.length)
+    
+    // 데이터 전송
+    dataWs.value.send(message)
   } catch (error) {
-    console.error('MCP 도구 호출 실패:', error)
+    console.error('오디오 데이터 전송 실패:', error)
+  }
+}
+
+const initAudioContext = async () => {
+  try {
+    audioContext.value = new AudioContext()
+    
+    // AudioWorklet 코드를 Blob으로 변환하여 URL 생성
+    const workletCode = `
+      class AudioProcessor extends AudioWorkletProcessor {
+        process(inputs, outputs, parameters) {
+          const input = inputs[0]
+          if (!input || !input[0]) return true
+      
+          // 입력 데이터를 16비트 PCM으로 변환
+          const pcmData = new Int16Array(input[0].length)
+          for (let i = 0; i < input[0].length; i++) {
+            const s = Math.max(-1, Math.min(1, input[0][i]))
+            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+          }
+      
+          // 메인 스레드로 PCM 데이터 전송
+          this.port.postMessage({
+            pcmData: pcmData,
+            timeStamp: currentFrame
+          })
+      
+          return true
+        }
+      }
+      
+      registerProcessor('audio-processor', AudioProcessor)
+    `
+    const blob = new Blob([workletCode], { type: 'application/javascript' })
+    const workletUrl = URL.createObjectURL(blob)
+
+    // AudioWorklet 프로세서 로드
+    await audioContext.value.audioWorklet.addModule(workletUrl)
+    
+    // Blob URL 정리
+    URL.revokeObjectURL(workletUrl)
+    
+    return true
+  } catch (error) {
+    console.error('AudioContext 초기화 오류:', error)
+    return false
   }
 }
 
@@ -279,13 +367,35 @@ onMounted(async () => {
     }
   }
 
-  // MCP 서버 상태 초기화
-  isServerReady.value = !!mcpStore.serverStatuses['voice-server']
+  // 서버 상태 확인
+  await checkServerStatus()
 })
 
 onUnmounted(() => {
   stopListening()
   audioContext.value?.close()
+  
+  // WebSocket 연결 종료
+  closeWebSocketConnections()
+})
+
+// 페이지 가시성 변경 감지
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    // 페이지가 숨겨질 때 연결 종료
+    closeWebSocketConnections()
+  } else {
+    // 페이지가 다시 보일 때 연결 재시도
+    checkServerStatus()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

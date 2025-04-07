@@ -40,10 +40,10 @@ const DEFAULT_INMEMORY_SERVERS: Record<string, MCPServerConfig> = {
     disable: false
   }
 }
-
+// 기본 MCP 서버 설정
 const DEFAULT_MCP_SERVERS = {
   mcpServers: {
-    // 先定义内置MCP服务器
+    // 先定义内置MCP服务器 
     ...DEFAULT_INMEMORY_SERVERS,
     // 之后是默认的三方MCP服务器
     memory: {
@@ -75,7 +75,7 @@ const DEFAULT_MCP_SERVERS = {
       env: {}
     }
   },
-  defaultServers: ['Artifacts'], // 默认服务器列表
+  defaultServers: ['Artifacts'],
   mcpEnabled: false // 默认关闭MCP功能
 }
 
