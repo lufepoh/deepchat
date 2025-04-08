@@ -60,8 +60,8 @@ export const MCP_EVENTS = {
   SERVER_STARTED: 'mcp:server-started',
   SERVER_STOPPED: 'mcp:server-stopped',
   CONFIG_CHANGED: 'mcp:config-changed',
-  TOOL_CALL_RESULT: 'mcp:tool-call-result',
-  SERVER_STATUS_CHANGED: 'mcp:server-status-changed'
+  SERVER_STATUS_CHANGED: 'mcp:server-status-changed',
+  TOOL_CALL_RESULT: 'mcp:tool-call-result'
 }
 // 同步相关事件
 export const SYNC_EVENTS = {
@@ -79,4 +79,19 @@ export const DEEPLINK_EVENTS = {
   PROTOCOL_RECEIVED: 'deeplink:protocol-received',
   START: 'deeplink:start',
   MCP_INSTALL: 'deeplink:mcp-install'
+}
+
+// Docker 相关事件
+export const DOCKER_EVENTS = {
+  LIST_IMAGES: 'docker:list-images',
+  LIST_CONTAINERS: 'docker:list-containers',
+  RUN_CONTAINER: 'docker:run-container',
+  STOP_CONTAINER: 'docker:stop-container',
+  REMOVE_CONTAINER: 'docker:remove-container',
+  SAVE_CONFIG: 'docker:save-config',
+  LOAD_CONFIG: 'docker:load-config',
+  PULL_IMAGE: 'docker:pull-image',
+  CONFIG_CHANGED: 'docker:config-changed',
+  SET_ENABLED: 'docker:set-enabled',
+  BUILD_IMAGE: 'docker:build-image'
 }

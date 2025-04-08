@@ -1,0 +1,21 @@
+{
+    "name": "CUDA Development Environment",
+    "image": "mcp_stt_server_dev:0.0.1",
+    "runArgs": [
+        "--name", "stt_server_dev",
+        "--gpus", "all",
+        "--network", "stt_network",
+        "-p", "8011:8011",
+        "-p", "8012:8012"
+    ],
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "workspaceFolder": "/workspace",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
+}

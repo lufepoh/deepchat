@@ -16,12 +16,19 @@
         <!-- 이미지 -->
         <div class="grid gap-2">
           <Label for="image">{{ t('settings.docker.containerImage') }}</Label>
-          <Input
-            id="image"
-            v-model="formData.image"
-            :placeholder="t('settings.docker.containerImagePlaceholder')"
-            required
-          />
+          <Select v-model="formData.image">
+            <SelectTrigger>
+              <SelectValue :placeholder="t('settings.docker.containerImagePlaceholder')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>{{ t('settings.docker.availableImages') }}</SelectLabel>
+                <SelectItem v-for="image in images" :key="image.id" :value="`${image.name}:${image.tag}`">
+                  {{ image.name }}:{{ image.tag }} ({{ image.size }})
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
 
         <!-- 포트 매핑 -->
@@ -148,7 +155,7 @@
       </div>
 
       <div class="flex justify-end gap-2">
-        <Button type="button" variant="outline" @click="$emit('cancel')">
+        <Button type="button" variant="outline" @click="handleCancel">
           {{ t('common.cancel') }}
         </Button>
         <Button type="submit">{{ t('common.save') }}</Button>
@@ -161,13 +168,23 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '@iconify/vue'
-import { type DockerContainerConfig } from '@/stores/dockerStore'
+import { useDockerStore, type DockerContainerConfig, type DockerImage } from '@/stores/dockerStore'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SelectGroup,
+  SelectLabel
+} from '@/components/ui/select'
 
 const { t } = useI18n()
+const dockerStore = useDockerStore()
 
 const props = defineProps<{
   containerConfig?: DockerContainerConfig
@@ -191,7 +208,10 @@ const formData = ref<Omit<DockerContainerConfig, 'id'>>({
   workingDir: ''
 })
 
-onMounted(() => {
+// 이미지 목록
+const images = ref<DockerImage[]>([])
+
+onMounted(async () => {
   // 기존 설정이 있으면 로드
   if (props.containerConfig) {
     formData.value = {
@@ -206,7 +226,16 @@ onMounted(() => {
       workingDir: props.containerConfig.workingDir || ''
     }
   }
+  
+  // 이미지 목록 로드
+  await loadImages()
 })
+
+// 이미지 목록 로드
+const loadImages = async () => {
+  await dockerStore.fetchImages()
+  images.value = dockerStore.images
+}
 
 // 포트 추가
 const addPort = () => {
@@ -246,6 +275,11 @@ const addArg = () => {
 // 인자 제거
 const removeArg = (index: number) => {
   formData.value.args.splice(index, 1)
+}
+
+// 취소 버튼 핸들러
+const handleCancel = () => {
+  emit('cancel')
 }
 
 // 폼 제출 처리
