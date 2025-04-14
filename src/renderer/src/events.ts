@@ -40,7 +40,9 @@ export const STREAM_EVENTS = {
 // 应用更新相关事件
 export const UPDATE_EVENTS = {
   STATUS_CHANGED: 'update:status-changed', // 替代 update-status-changed
-  ERROR: 'update:error' // 替代 update-error
+  ERROR: 'update:error', // 替代 update-error
+  PROGRESS: 'update:progress', // 下载进度
+  WILL_RESTART: 'update:will-restart' // 准备重启
 }
 
 // 窗口相关事件
@@ -81,6 +83,10 @@ export const DEEPLINK_EVENTS = {
   MCP_INSTALL: 'deeplink:mcp-install'
 }
 
+// 全局通知相关事件
+export const NOTIFICATION_EVENTS = {
+  SHOW_ERROR: 'notification:show-error' // 显示错误通知
+}
 // Docker 相关事件
 export const DOCKER_EVENTS = {
   LIST_IMAGES: 'docker:list-images',

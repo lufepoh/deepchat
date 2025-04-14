@@ -299,6 +299,9 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     temperature?: number,
     maxTokens?: number
   ): Promise<void> {
+    // 记录输入到大模型的消息内容
+    console.log('startStreamCompletion', messages)
+
     if (!this.canStartNewStream()) {
       throw new Error('已达到最大并发流数量限制')
     }
@@ -425,7 +428,8 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
     temperature?: number,
     maxTokens?: number
   ): Promise<string> {
-    console.log('generateCompletion', providerId, modelId, temperature, maxTokens)
+    // 记录输入到大模型的消息内容
+    console.log('generateCompletion', providerId, modelId, temperature, maxTokens, messages)
     const provider = this.getProviderInstance(providerId)
     const response = await provider.completions(messages, modelId, temperature, maxTokens)
     return response.content
@@ -462,6 +466,28 @@ export class LLMProviderPresenter implements ILlmProviderPresenter {
   ): Promise<string[]> {
     const provider = this.getProviderInstance(providerId)
     return provider.suggestions(context, modelId, temperature, maxTokens)
+  }
+
+  async generateCompletionStandalone(
+    providerId: string,
+    messages: ChatMessage[],
+    modelId: string,
+    temperature?: number,
+    maxTokens?: number
+  ): Promise<string> {
+    // 记录输入到大模型的消息内容
+    console.log('streamCompletionStandalone', messages)
+    const provider = this.getProviderInstance(providerId)
+    let response = ''
+    try {
+      const llmResponse = await provider.completions(messages, modelId, temperature, maxTokens)
+      response = llmResponse.content
+
+      return response
+    } catch (error) {
+      console.error('Stream error:', error)
+      return ''
+    }
   }
 
   // 配置相关方法

@@ -38,6 +38,50 @@ const DEFAULT_INMEMORY_SERVERS: Record<string, MCPServerConfig> = {
     command: 'artifacts',
     env: {},
     disable: false
+  },
+  bochaSearch: {
+    args: [],
+    descriptions: 'DeepChat内置博查搜索服务',
+    icons: '🔍',
+    autoApprove: ['all'],
+    type: 'inmemory' as MCPServerType,
+    command: 'bochaSearch',
+    env: {
+      apiKey: 'YOUR_BOCHA_API_KEY' // 需要用户提供实际的API Key
+    },
+    disable: false
+  },
+  braveSearch: {
+    args: [],
+    descriptions: 'DeepChat内置Brave搜索服务',
+    icons: '🦁',
+    autoApprove: ['all'],
+    type: 'inmemory' as MCPServerType,
+    command: 'braveSearch',
+    env: {
+      apiKey: 'YOUR_BRAVE_API_KEY' // 需要用户提供实际的API Key
+    },
+    disable: false
+  },
+  imageServer: {
+    args: [],
+    descriptions: 'Image processing MCP service',
+    icons: '🖼️',
+    autoApprove: ['read_image_base64', 'read_multiple_images_base64'], // Auto-approve reading, require confirmation for uploads
+    type: 'inmemory' as MCPServerType,
+    command: 'image', // We need to map this command to the ImageServer class later
+    env: {},
+    disable: false
+  },
+  powerpack: {
+    args: [],
+    descriptions: 'DeepChat内置增强工具包',
+    icons: '🛠️',
+    autoApprove: ['all'],
+    type: 'inmemory' as MCPServerType,
+    command: 'powerpack',
+    env: {},
+    disable: false
   }
 }
 // 기본 MCP 서버 설정
@@ -55,24 +99,6 @@ const DEFAULT_MCP_SERVERS = {
       autoApprove: ['all'],
       disable: true,
       type: 'stdio' as MCPServerType
-    },
-    bitcoin: {
-      command: 'npx',
-      args: ['-y', 'bitcoin-mcp@latest'],
-      env: {},
-      descriptions: '查询比特币',
-      icons: '💰',
-      autoApprove: ['all'],
-      type: 'stdio' as MCPServerType
-    },
-    airbnb: {
-      descriptions: 'Airbnb',
-      icons: '🏠',
-      autoApprove: ['all'],
-      type: 'stdio' as MCPServerType,
-      command: 'npx',
-      args: ['-y', '@openbnb/mcp-server-airbnb', '--ignore-robots-txt'],
-      env: {}
     }
   },
   defaultServers: ['Artifacts'],
@@ -135,12 +161,31 @@ export class McpConfHelper {
   // 添加默认服务器
   async addMcpDefaultServer(serverName: string): Promise<void> {
     const defaultServers = this.mcpStore.get('defaultServers') || []
-    if (!defaultServers.includes(serverName)) {
-      defaultServers.push(serverName)
-      this.mcpStore.set('defaultServers', defaultServers)
+    const mcpServers = this.mcpStore.get('mcpServers') || {}
+
+    // 检测并清理失效的服务器
+    const validDefaultServers = defaultServers.filter((server) => {
+      const exists = mcpServers[server] !== undefined
+      if (!exists) {
+        console.log(`检测到失效的MCP服务器: ${server}，已从默认列表中移除`)
+      }
+      return exists
+    })
+
+    // 添加新服务器（如果不在列表中）
+    if (!validDefaultServers.includes(serverName)) {
+      validDefaultServers.push(serverName)
+    }
+
+    // 如果有变化则更新存储并发送事件
+    if (
+      validDefaultServers.length !== defaultServers.length ||
+      !defaultServers.includes(serverName)
+    ) {
+      this.mcpStore.set('defaultServers', validDefaultServers)
       eventBus.emit(MCP_EVENTS.CONFIG_CHANGED, {
-        mcpServers: this.mcpStore.get('mcpServers'),
-        defaultServers,
+        mcpServers: mcpServers,
+        defaultServers: validDefaultServers,
         mcpEnabled: this.mcpStore.get('mcpEnabled')
       })
     }
@@ -264,7 +309,7 @@ export class McpConfHelper {
       // 迁移 filesystem 服务器到 buildInFileSystem
       try {
         const mcpServers = this.mcpStore.get('mcpServers') || {}
-        console.log('mcpServers', mcpServers)
+        // console.log('mcpServers', mcpServers)
         if (mcpServers.filesystem) {
           console.log('检测到旧版本的 filesystem MCP 服务器，开始迁移到 buildInFileSystem')
 

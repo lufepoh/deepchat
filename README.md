@@ -113,11 +113,14 @@
       <img src="./src/renderer/src/assets/llm-icons/qiniu.svg" width="50" height="50"><br/>
       <a href="https://www.qiniu.com/products/ai-token-api">Qiniu</a>
     </td>
-    <td colspan="1">
-          Compatible with any model provider in openai/gemini API format
+    <td>
+      <img src="./src/renderer/src/assets/llm-icons/grok.svg" width="50" height="50"><br/>
+      <a href="https://x.ai/">Grok</a>
     </td>
   </tr>
 </table>
+
+### Compatible with any model provider in OpenAI/Gemini/Anthropic API format
 
 ## Other Features
 
@@ -182,7 +185,8 @@ $ npm run build:linux:arm64
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ThinkInAIXYZ/deepchat&type=Date)](https://star-history.com/#ThinkInAIXYZ/deepchat&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=ThinkInAIXYZ/deepchat&type=Timeline)](https://www.star-history.com/#ThinkInAIXYZ/deepchat&Timeline)
+
 
 ## Contributors
 

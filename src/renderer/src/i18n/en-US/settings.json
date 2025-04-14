@@ -181,6 +181,7 @@
     "enabledTitle": "Enable MCP",
     "enabledDescription": "Enable or disable MCP functionality and tools",
     "enableToAccess": "Please enable MCP to access configuration options",
+    "marketplace": "Go to the MCP Market for one-click installation",
     "tabs": {
       "servers": "Servers",
       "tools": "Tools"
@@ -209,6 +210,7 @@
       "typeStdio": "Standard input and output (Stdio)",
       "typeSse": "Server Send Events (SSE)",
       "typeInMemory": "In-Memory",
+      "typeHttp": "Streaming HTTP Requests (HTTP)",
       "baseUrl": "Base URL",
       "baseUrlPlaceholder": "Enter server base URL (e.g. http://localhost:3000)",
       "command": "Command",
@@ -247,8 +249,8 @@
       "skipToManual": "Skip to Manual Configuration",
       "parseAndContinue": "Parse & Continue",
       "jsonParseError": "JSON parsing failed",
-      "typeHttp": "Streaming HTTP Requests (HTTP)",
-      "useSSE": "Enable SSE transfer"
+      "browseMarketplace": "Browse MCP Marketplace",
+      "imageModel": "Choose a vision model"
     },
     "deleteServer": "Delete Server",
     "editServer": "Edit Server",
@@ -276,7 +278,9 @@
     "customServers": "Custom Servers",
     "builtIn": "Built-in",
     "cannotRemoveBuiltIn": "Cannot Remove Built-in Server",
-    "builtInServerCannotBeRemoved": "Built-in servers cannot be removed, only parameters and environment variables can be modified"
+    "builtInServerCannotBeRemoved": "Built-in servers cannot be removed, only parameters and environment variables can be modified",
+    "maxDefaultServersReached": "Only 3 default servers can be set at most",
+    "removeDefaultFirst": "Please remove some default servers first"
   },
   "about": {
     "title": "About Us",

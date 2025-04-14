@@ -177,10 +177,11 @@
   },
   "mcp": {
     "title": "MCP设置",
-    "description": "管理和配置MCP（Model Control Protocol）服务器和工具",
+    "description": "管理和配置MCP（模型控制协议）服务器和工具",
     "enabledTitle": "启用MCP",
     "enabledDescription": "启用或禁用MCP功能和工具",
     "enableToAccess": "请先启用MCP以访问配置选项",
+    "marketplace": "前往MCP市场一键安装",
     "tabs": {
       "servers": "服务器",
       "tools": "工具"
@@ -208,7 +209,7 @@
       "typePlaceholder": "选择服务器类型",
       "typeStdio": "标准输入输出(Stdio)",
       "typeSse": "服务器发送事件(SSE)",
-      "typeInMemory": "内存(InMemory)",
+      "typeInMemory": "内存型(InMemory)",
       "typeHttp": "可流式传输的HTTP请求(HTTP)",
       "baseUrl": "基础URL",
       "baseUrlPlaceholder": "输入服务器基础URL（如：http://localhost:3000）",
@@ -248,7 +249,8 @@
       "skipToManual": "跳过至手动配置",
       "parseAndContinue": "解析并继续",
       "jsonParseError": "JSON解析失败",
-      "useSSE": "启用SSE传输"
+      "browseMarketplace": "浏览MCP服务市场",
+      "imageModel": "选择视觉模型"
     },
     "deleteServer": "删除服务器",
     "editServer": "编辑服务器",
@@ -276,7 +278,9 @@
     "customServers": "自定义服务",
     "builtIn": "内置",
     "cannotRemoveBuiltIn": "无法删除内置服务",
-    "builtInServerCannotBeRemoved": "内置服务不能被删除，仅支持修改参数和环境变量"
+    "builtInServerCannotBeRemoved": "内置服务不能被删除，仅支持修改参数和环境变量",
+    "maxDefaultServersReached": "最多只能设置3个默认服务器",
+    "removeDefaultFirst": "请先移除一些默认服务器"
   },
   "about": {
     "title": "关于我们",

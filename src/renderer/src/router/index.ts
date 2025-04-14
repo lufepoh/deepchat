@@ -1,8 +1,4 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import ChatTabView from '@/views/ChatTabView.vue'
-import SettingsTabView from '@/views/SettingsTabView.vue'
-import WelcomeView from '@/views/WelcomeView.vue'
-import VoiceTabView from '@/views/VoiceTabView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -10,7 +6,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'chat',
-      component: ChatTabView,
+      component: () => import('@/views/ChatTabView.vue'),
       meta: {
         titleKey: 'routes.chat',
         icon: 'lucide:message-square'
@@ -28,7 +24,7 @@ const router = createRouter({
     {
       path: '/welcome',
       name: 'welcome',
-      component: WelcomeView,
+      component: () => import('@/views/WelcomeView.vue'),
       meta: {
         titleKey: 'routes.welcome',
         icon: 'lucide:message-square'
@@ -37,7 +33,7 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'settings',
-      component: SettingsTabView,
+      component: () => import('@/views/SettingsTabView.vue'),
       meta: {
         titleKey: 'routes.settings',
         icon: 'lucide:settings'

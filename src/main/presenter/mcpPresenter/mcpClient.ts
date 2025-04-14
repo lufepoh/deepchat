@@ -11,7 +11,7 @@ import { app } from 'electron'
 import fs from 'fs'
 import { proxyConfig } from '@/presenter/proxyConfig'
 import { getInMemoryServer } from './inMemoryServers/builder'
-import { StreamableHttpClientTransport } from './streamableHttp'
+import { StreamableHTTPClientTransport } from './streamableHttp'
 
 // 确保 TypeScript 能够识别 SERVER_STATUS_CHANGED 属性
 type MCPEventsType = typeof MCP_EVENTS & {
@@ -97,7 +97,7 @@ export class McpClient {
     const runtimePath = path
       .join(app.getAppPath(), 'runtime', 'node')
       .replace('app.asar', 'app.asar.unpacked')
-    console.log('runtimePath', runtimePath)
+    console.info('runtimePath', runtimePath)
     // 检查运行时文件是否存在
     if (process.platform === 'win32') {
       const nodeExe = path.join(runtimePath, 'node.exe')
@@ -130,13 +130,13 @@ export class McpClient {
       if (this.serverConfig.type === 'inmemory') {
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
         const _args = Array.isArray(this.serverConfig.args) ? this.serverConfig.args : []
-        const _server = getInMemoryServer(this.serverName, _args)
+        const _env = this.serverConfig.env ? (this.serverConfig.env as Record<string, string>) : {}
+        const _server = getInMemoryServer(this.serverName, _args, _env)
         _server.startServer(serverTransport)
         this.transport = clientTransport
       } else if (this.serverConfig.type === 'stdio') {
         // 创建合适的transport
         const command = this.serverConfig.command as string
-        console.log('final command', command)
         const HOME_DIR = app.getPath('home')
 
         // 定义允许的环境变量白名单
@@ -271,9 +271,8 @@ export class McpClient {
       } else if (this.serverConfig.baseUrl && this.serverConfig.type === 'sse') {
         this.transport = new SSEClientTransport(new URL(this.serverConfig.baseUrl as string))
       } else if (this.serverConfig.baseUrl && this.serverConfig.type === 'http') {
-        this.transport = new StreamableHttpClientTransport(
-          new URL(this.serverConfig.baseUrl as string),
-          { useSSE: !!this.serverConfig.useSSE }
+        this.transport = new StreamableHTTPClientTransport(
+          new URL(this.serverConfig.baseUrl as string)
         )
       } else {
         throw new Error(`不支持的传输类型: ${this.serverConfig.type}`)
@@ -281,7 +280,7 @@ export class McpClient {
 
       // 创建 MCP 客户端
       this.client = new Client(
-        { name: `deepchat-client-${this.serverName}`, version: '1.0.0' },
+        { name: 'DeepChat', version: app.getVersion() },
         {
           capabilities: {
             resources: {},

@@ -17,9 +17,17 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { MCPServerConfig } from '@shared/presenter'
 import { EmojiPicker } from '@/components/ui/emoji-picker'
 import { useToast } from '@/components/ui/toast'
+import { Icon } from '@iconify/vue'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ChevronDown } from 'lucide-vue-next'
+import ModelSelect from '@/components/ModelSelect.vue'
+import ModelIcon from '@/components/icons/ModelIcon.vue'
+import { useSettingsStore } from '@/stores/settings'
+import type { RENDERER_MODEL_META } from '@shared/presenter'
 
 const { t } = useI18n()
 const { toast } = useToast()
+const settingsStore = useSettingsStore()
 
 const props = defineProps<{
   serverName?: string
@@ -41,12 +49,43 @@ const descriptions = ref(props.initialConfig?.descriptions || '')
 const icons = ref(props.initialConfig?.icons || '📁')
 const type = ref<'sse' | 'stdio' | 'inmemory' | 'http'>(props.initialConfig?.type || 'stdio')
 const baseUrl = ref(props.initialConfig?.baseUrl || '')
-const useSSE = ref(props.initialConfig?.useSSE || false)
+
+// 模型选择相关
+const modelSelectOpen = ref(false)
+const selectedImageModel = ref<RENDERER_MODEL_META | null>(null)
+const selectedImageModelProvider = ref('')
 
 // 判断是否是inmemory类型
 const isInMemoryType = computed(() => type.value === 'inmemory')
+// 判断是否是imageServer
+const isImageServer = computed(() => isInMemoryType.value && name.value === 'imageServer')
 // 判断字段是否只读(inmemory类型除了args和env外都是只读的)
 const isFieldReadOnly = computed(() => props.editMode && isInMemoryType.value)
+
+// 处理模型选择
+const handleImageModelSelect = (model: RENDERER_MODEL_META, providerId: string) => {
+  selectedImageModel.value = model
+  selectedImageModelProvider.value = providerId
+  // 将provider和modelId以空格分隔拼接成args的值
+  args.value = `${providerId} ${model.id}`
+  modelSelectOpen.value = false
+}
+
+// 获取内置服务器的本地化名称和描述
+const getLocalizedName = computed(() => {
+  const name = props.serverName
+  if (isInMemoryType.value && name) {
+    return t(`mcp.inmemory.${name}.name`, name)
+  }
+  return name
+})
+
+const getLocalizedDesc = computed(() => {
+  if (isInMemoryType.value && name.value) {
+    return t(`mcp.inmemory.${name.value}.desc`, descriptions.value)
+  }
+  return descriptions.value
+})
 
 // 权限设置
 const autoApproveAll = ref(props.initialConfig?.autoApprove?.includes('all') || false)
@@ -102,12 +141,12 @@ const parseJsonConfig = () => {
     env.value = JSON.stringify(serverConfig.env || {}, null, 2)
     descriptions.value = serverConfig.descriptions || ''
     icons.value = serverConfig.icons || '📁'
-    type.value = serverConfig.type || 'stdio'
+    type.value = serverConfig.type || ''
     baseUrl.value = serverConfig.url || ''
-    useSSE.value = serverConfig.useSSE || false
+    console.log('type', type.value, baseUrl.value)
     if (type.value !== 'stdio' && type.value !== 'sse' && type.value !== 'http') {
       if (baseUrl.value) {
-        type.value = 'sse'
+        type.value = 'http'
       } else {
         type.value = 'stdio'
       }
@@ -220,11 +259,10 @@ const handleSubmit = () => {
       command: '', // 提供空字符串作为默认值
       args: [], // 提供空数组作为默认值
       env: {}, // 提供空对象作为默认值
-      baseUrl: baseUrl.value.trim(),
-      useSSE: useSSE.value
+      baseUrl: baseUrl.value.trim()
     }
   } else {
-    // STDIO类型的服务器
+    // STDIO类型的服务器或者inmemory类型
     try {
       serverConfig = {
         ...baseConfig,
@@ -279,6 +317,35 @@ watch(
   },
   { immediate: true }
 )
+
+// 初始化时解析args中的provider和modelId（针对imageServer）
+watch(
+  [() => name.value, () => args.value, () => type.value],
+  ([newName, newArgs, newType]) => {
+    if (newType === 'inmemory' && newName === 'imageServer' && newArgs) {
+      // 从args中解析出provider和modelId
+      const argsParts = newArgs.split(/\s+/)
+      if (argsParts.length >= 2) {
+        const providerId = argsParts[0]
+        const modelId = argsParts[1]
+        // 查找对应的模型
+        const foundModel = settingsStore.findModelByIdOrName(modelId)
+        if (foundModel && foundModel.providerId === providerId) {
+          selectedImageModel.value = foundModel.model
+          selectedImageModelProvider.value = providerId
+        } else {
+          console.warn(`未找到匹配的模型: ${providerId} ${modelId}`)
+        }
+      }
+    }
+  },
+  { immediate: true }
+)
+
+// 打开MCP Marketplace
+const openMcpMarketplace = () => {
+  window.open('https://mcp.deepchatai.cn', '_blank')
+}
 </script>
 
 <template>
@@ -288,6 +355,19 @@ watch(
       <div class="space-y-4 px-4 pb-4">
         <div class="text-sm">
           {{ t('settings.mcp.serverForm.jsonConfigIntro') }}
+        </div>
+
+        <!-- MCP Marketplace 入口 -->
+        <div class="my-4">
+          <Button
+            variant="outline"
+            class="w-full flex items-center justify-center gap-2"
+            @click="openMcpMarketplace"
+          >
+            <Icon icon="lucide:shopping-bag" class="w-4 h-4" />
+            <span>{{ t('settings.mcp.serverForm.browseMarketplace') }}</span>
+            <Icon icon="lucide:external-link" class="w-3.5 h-3.5 text-muted-foreground" />
+          </Button>
         </div>
 
         <div class="space-y-2">
@@ -314,7 +394,19 @@ watch(
     <ScrollArea class="h-0 flex-grow">
       <div class="space-y-2 px-4 pb-4">
         <!-- 服务器名称 -->
-        <div class="space-y-2">
+        <!-- 本地化名称 (针对inmemory类型) -->
+        <div class="space-y-2" v-if="isInMemoryType && name">
+          <Label class="text-xs text-muted-foreground" for="localized-name">{{
+            t('settings.mcp.serverForm.name')
+          }}</Label>
+
+          <div
+            class="flex h-9 items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background opacity-50"
+          >
+            {{ getLocalizedName }}
+          </div>
+        </div>
+        <div class="space-y-2" v-else>
           <Label class="text-xs text-muted-foreground" for="server-name">{{
             t('settings.mcp.serverForm.name')
           }}</Label>
@@ -373,19 +465,6 @@ watch(
           />
         </div>
 
-        <!-- HTTP类型的SSE选项 -->
-        <div class="space-y-2" v-if="type === 'http'">
-          <div class="flex items-center space-x-2">
-            <Checkbox id="use-sse" v-model:checked="useSSE" :disabled="isFieldReadOnly" />
-            <label
-              for="use-sse"
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              {{ t('settings.mcp.serverForm.useSSE') }}
-            </label>
-          </div>
-        </div>
-
         <!-- 命令 -->
         <div class="space-y-2" v-if="showCommandFields">
           <Label class="text-xs text-muted-foreground" for="server-command">{{
@@ -401,7 +480,28 @@ watch(
         </div>
 
         <!-- 参数 -->
-        <div class="space-y-2" v-if="showCommandFields || isInMemoryType">
+        <div v-if="isImageServer" class="space-y-2">
+          <Label class="text-xs text-muted-foreground" for="server-model">
+            {{ t('settings.mcp.serverForm.imageModel') || '模型选择' }}
+          </Label>
+          <Popover v-model:open="modelSelectOpen">
+            <PopoverTrigger as-child>
+              <Button variant="outline" class="w-full justify-between">
+                <div class="flex items-center gap-2">
+                  <ModelIcon :model-id="selectedImageModel?.id || ''" class="h-4 w-4" />
+                  <span class="truncate">{{
+                    selectedImageModel?.name || t('settings.common.selectModel')
+                  }}</span>
+                </div>
+                <ChevronDown class="h-4 w-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent class="w-80 p-0">
+              <ModelSelect @update:model="handleImageModelSelect" />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div class="space-y-2" v-else-if="showCommandFields || isInMemoryType">
           <Label class="text-xs text-muted-foreground" for="server-args">{{
             t('settings.mcp.serverForm.args')
           }}</Label>
@@ -427,7 +527,18 @@ watch(
         </div>
 
         <!-- 描述 -->
-        <div class="space-y-2">
+        <!-- 本地化描述 (针对inmemory类型) -->
+        <div class="space-y-2" v-if="isInMemoryType && name">
+          <Label class="text-xs text-muted-foreground" for="localized-desc">{{
+            t('settings.mcp.serverForm.descriptions')
+          }}</Label>
+          <div
+            class="flex h-9 items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background opacity-50"
+          >
+            {{ getLocalizedDesc }}
+          </div>
+        </div>
+        <div class="space-y-2" v-else>
           <Label class="text-xs text-muted-foreground" for="server-description">{{
             t('settings.mcp.serverForm.descriptions')
           }}</Label>
