@@ -246,7 +246,7 @@
 
     <!-- 컨테이너 추가 다이얼로그 -->
     <Dialog v-model:open="isAddContainerDialogOpen">
-      <DialogContent class="sm:max-w-[700px]">
+      <DialogContent class="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{{ t('docker.addContainerDialog.title') }}</DialogTitle>
         </DialogHeader>
@@ -256,7 +256,7 @@
 
     <!-- 컨테이너 편집 다이얼로그 -->
     <Dialog v-model:open="isEditContainerDialogOpen">
-      <DialogContent class="sm:max-w-[700px]">
+      <DialogContent class="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{{ t('docker.editContainerDialog.title') }}</DialogTitle>
         </DialogHeader>
@@ -312,10 +312,16 @@ function initIpcListeners() {
     }
   })
 
-  window.electron.ipcRenderer.on('docker:build-complete', (_, result) => {
+  window.electron.ipcRenderer.on('docker:build-complete', async (_, { success }) => {
     const id = lastBuildingContainerId.value
     if (id) {
       delete buildLogMap.value[id]
+      dockerStore.loadingStates[id] = false
+      lastBuildingContainerId.value = null
+      
+      if (success) {
+        await dockerStore.fetchImages()
+      }
     }
   })
 }
@@ -357,7 +363,8 @@ function getContainerStatus(config: DockerContainerConfig) {
   return c ? (c.isRunning ? 'running' : 'stopped') : null
 }
 function isRunning(config: DockerContainerConfig) {
-  return getContainerStatus(config) === 'running'
+  const status = getContainerStatus(config)
+  return status === 'running'
 }
 function getContainerId(config: DockerContainerConfig) {
   const c = dockerStore.containers.find(cc => cc.name === config.name)
@@ -365,8 +372,47 @@ function getContainerId(config: DockerContainerConfig) {
 }
 
 // 컨테이너 run / stop
-async function runContainer(configId: string) {
-  await dockerStore.runContainer(configId)
+async function runContainer(config: DockerContainerConfig) {
+  try {
+    const serializedConfig = {
+      name: config.name || '',
+      image: config.image || '',
+      args: Array.isArray(config.args) ? [...config.args] : [],
+      ports: Array.isArray(config.ports) ? [...config.ports] : [],
+      volumes: Array.isArray(config.volumes) ? [...config.volumes] : [],
+      env: Array.isArray(config.env) ? [...config.env] : []
+    }
+
+    // 기존 컨테이너 확인
+    const existingContainer = await window.electron.ipcRenderer.invoke('docker:container-status', config.name)
+    if (existingContainer) {
+      if (existingContainer.status === 'running') {
+        toast({
+          title: t('docker.containerExists'),
+          description: t('docker.containerAlreadyRunning'),
+          variant: 'default'
+        })
+        return
+      }
+      // 중지된 컨테이너 제거
+      await window.electron.ipcRenderer.invoke('docker:remove-container', config.name)
+    }
+
+    await window.electron.ipcRenderer.invoke('docker:run-container', serializedConfig)
+    toast({
+      title: t('docker.containerStarted'),
+      description: `${config.name} ${t('docker.running')}`,
+      variant: 'default'
+    })
+    await dockerStore.fetchContainers()
+  } catch (error) {
+    console.error('컨테이너 실행 오류:', error)
+    toast({
+      title: t('docker.runFail'),
+      description: error instanceof Error ? error.message : String(error),
+      variant: 'destructive'
+    })
+  }
 }
 async function stopContainerById(containerId: string | undefined, configId: string) {
   if (containerId) {
@@ -404,47 +450,72 @@ function shouldBuildImage(container: DockerContainerConfig) {
 }
 
 // 빌드 or 실행
-function handleContainerAction(container: DockerContainerConfig) {
+async function handleContainerAction(container: DockerContainerConfig) {
   if (shouldBuildImage(container)) {
     buildImage(container)
   } else {
-    runContainer(container.id)
+    // 이미 실행 중인지 확인
+    const containers = await window.electron.ipcRenderer.invoke('docker:list-containers')
+    if (containers.success) {
+      const existingContainer = containers.containers.find(c => c.name === container.name)
+      if (existingContainer?.isRunning) {
+        toast({
+          title: t('docker.containerExists'),
+          description: t('docker.containerAlreadyRunning'),
+          variant: 'default'
+        })
+        return
+      }
+    }
+    runContainer(container)
   }
 }
 
 // 빌드 실행
 async function buildImage(container: DockerContainerConfig) {
   if (!container.buildPath) {
-    toast({ title: t('docker.buildFail'), description: '빌드 경로가 지정되지 않았습니다.', variant: 'destructive' })
+    toast({
+      title: t('docker.buildFail'),
+      description: '빌드 경로가 지정되지 않았습니다.',
+      variant: 'destructive'
+    })
     return
   }
   try {
     dockerStore.loadingStates[container.id] = true
     lastBuildingContainerId.value = container.id
-    // buildProgressMap.value[container.id] = 0
 
     const imageName = container.image
     const resp = await dockerStore.buildImage(container.buildPath, imageName)
-    if (resp && resp.success) {
+    if (resp) {
       // 빌드 완료 후 이미지 목록 갱신
-      dockerStore.updateContainerConfig(container.id, { image: imageName })
       await dockerStore.fetchImages()
+      dockerStore.updateContainerConfig(container.id, { image: imageName })
+      
+      // 로딩 상태 초기화
+      dockerStore.loadingStates[container.id] = false
+      lastBuildingContainerId.value = null
+      
+      // 빌드 로그 초기화
+      delete buildLogMap.value[container.id]
     } else {
       toast({
         title: t('docker.buildFail'),
-        description: resp?.error || '이미지 빌드에 실패했습니다.',
+        description: '이미지 빌드에 실패했습니다.',
         variant: 'destructive'
       })
       dockerStore.loadingStates[container.id] = false
       lastBuildingContainerId.value = null
-      // delete buildProgressMap.value[container.id]
     }
-  } catch (err) {
-    console.error(err)
-    toast({ title: t('docker.buildFail'), description: String(err), variant: 'destructive' })
+  } catch (error) {
+    console.error('Docker 이미지 빌드 실패:', error)
+    toast({
+      title: t('docker.buildFail'),
+      description: String(error),
+      variant: 'destructive'
+    })
     dockerStore.loadingStates[container.id] = false
     lastBuildingContainerId.value = null
-    // delete buildProgressMap.value[container.id]
   }
 }
 </script>

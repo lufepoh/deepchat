@@ -19,7 +19,9 @@ export const DOCKER_EVENTS = {
   CONFIG_CHANGED: 'docker:config-changed',
   SET_ENABLED: 'docker:set-enabled',
   BUILD_IMAGE: 'docker:build-image',
-  CHECK_DOCKER: 'docker:check'
+  CHECK_DOCKER: 'docker:check',
+  CONTAINER_STATUS: 'docker:container-status',
+  CLEANUP_CONTAINERS: 'docker:cleanup-containers'
 }
 
 // Docker 설정 타입
@@ -56,7 +58,7 @@ const DEFAULT_BUILTIN_CONTAINERS: Record<string, DockerContainerConfig> = {
     volumes: [`${path.join(app.getPath('userData'), 'models')}:/app/models`],
     env: ['CUDA_VISIBLE_DEVICES=0'],
     enabled: true,
-    autoStart: false,
+    autoStart: true,
     isBuiltIn: true,
     buildPath: path.join(process.cwd(), 'src', 'main', 'docker-services', 'deepchat-stt-server'),
     description: '실시간 음성 인식 STT 서버'
@@ -169,7 +171,9 @@ export async function initDocker() {
     try {
       // 내장 이미지인 경우 이미지 확인 및 빌드
       if (config.isBuiltIn && config.buildPath) {
-        await ensureBuiltInImage(config)
+        if(!await ensureBuiltInImage(config)) {
+          return { success: false, error: '내장 이미지 빌드 실패' }
+        }
       }
       
       const execPromise = promisify(exec)
@@ -392,31 +396,77 @@ export async function initDocker() {
     }
   })
   
+  // 컨테이너 상태 확인
+  ipcMain.handle(DOCKER_EVENTS.CONTAINER_STATUS, async (_, containerName: string) => {
+    try {
+      const execPromise = promisify(exec)
+      const { stdout } = await execPromise(`docker ps -a --filter "name=${containerName}" --format "{{.Status}}"`)
+      
+      const status = stdout.trim()
+      if (!status) {
+        return { success: true, status: null }
+      }
+      
+      return {
+        success: true,
+        status: {
+          status,
+          isRunning: status.startsWith('Up')
+        }
+      }
+    } catch (error) {
+      console.error('컨테이너 상태 확인 실패:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+  
   // 앱 시작 시 자동 시작 설정된 컨테이너 실행
-  startAutoStartContainers()
+  console.log('Docker 초기화 완료, 자동 시작 컨테이너 실행 시작...')
+  await startAutoStartContainers()
+
+  // 앱 종료 시 내장 컨테이너 정리
+  app.on('before-quit', async (event) => {
+    event.preventDefault() // 앱 종료를 잠시 지연
+    await cleanupBuiltInContainers()
+    app.exit() // 정리 완료 후 앱 종료
+  })
+
+  // 내장 컨테이너 정리 이벤트 핸들러
+  ipcMain.handle(DOCKER_EVENTS.CLEANUP_CONTAINERS, async () => {
+    return await cleanupBuiltInContainers()
+  })
 }
 
 // 내장 컨테이너 설정 업데이트
 async function updateBuiltInContainers() {
   try {
+    console.log('내장 컨테이너 설정 업데이트 시작...')
     const storedBuiltIn = dockerStore.get('builtInContainers', {})
     const updatedBuiltIn = { ...storedBuiltIn }
     
     // 기본 내장 컨테이너 설정 추가 또는 업데이트
     for (const [key, value] of Object.entries(DEFAULT_BUILTIN_CONTAINERS)) {
+      console.log(`내장 컨테이너 ${key} 설정 업데이트 중...`)
       if (!updatedBuiltIn[key]) {
+        console.log(`새로운 내장 컨테이너 ${key} 추가`)
         updatedBuiltIn[key] = value
       } else {
-        // ID와 isBuiltIn 속성은 항상 유지
-        updatedBuiltIn[key].id = value.id
-        updatedBuiltIn[key].isBuiltIn = true
-        
-        updatedBuiltIn[key].buildPath = DEFAULT_BUILTIN_CONTAINERS[key].buildPath
+        // 기존 설정 유지하면서 필수 속성만 업데이트
+        console.log(`기존 내장 컨테이너 ${key} 업데이트`)
+        updatedBuiltIn[key] = {
+          ...updatedBuiltIn[key],
+          id: value.id,
+          isBuiltIn: true,
+          buildPath: value.buildPath,
+          autoStart: true, // 자동 시작 항상 활성화
+          enabled: true // 항상 활성화
+        }
       }
     }
     
     // 변경 사항이 있으면 저장
     if (JSON.stringify(updatedBuiltIn) !== JSON.stringify(storedBuiltIn)) {
+      console.log('내장 컨테이너 설정 변경 사항 저장')
       dockerStore.set('builtInContainers', updatedBuiltIn)
     }
   } catch (error) {
@@ -438,12 +488,13 @@ async function ensureBuiltInImage(config: DockerContainerConfig): Promise<boolea
       console.log(`내장 이미지 빌드 필요: ${config.image}`)
       
       // 이미지가 없으면 빌드
-      const result = await execPromise(`docker build -t ${config.image} ${config.buildPath}`)
-      console.log('이미지 빌드 결과:', result.stdout)
-      if (result.stderr) {
-        console.warn('이미지 빌드 경고:', result.stderr)
-      }
-      return true
+      // const result = await execPromise(`docker build -t ${config.image} ${config.buildPath}`)
+      // console.log('이미지 빌드 결과:', result.stdout)
+      // if (result.stderr) {
+      //   console.warn('이미지 빌드 경고:', result.stderr)
+      // }
+      // return true
+      return false
     } else {
       console.log(`이미지가 이미 존재함: ${config.image}`)
       return true
@@ -457,21 +508,37 @@ async function ensureBuiltInImage(config: DockerContainerConfig): Promise<boolea
 // 자동 시작 설정된 컨테이너 실행
 async function startAutoStartContainers() {
   try {
+    // Docker가 활성화되어 있는지 확인
     const enabled = dockerStore.get('enabledByDefault', false)
-    if (!enabled) return
-    
-    // 사용자 정의 컨테이너
-    const containers = dockerStore.get('containers', []).filter(c => c.autoStart && c.enabled)
+    if (!enabled) {
+      console.log('Docker가 비활성화되어 있어 자동 시작을 건너뜁니다.')
+      return
+    }
+
+    // Docker가 설치되어 있는지 확인
+    const isInstalled = await checkDockerInstalled()
+    if (!isInstalled) {
+      console.log('Docker가 설치되어 있지 않아 자동 시작을 건너뜁니다.')
+      return
+    }
+
+    console.log('자동 시작 컨테이너 실행 시작...')
     
     // 내장 컨테이너
     const builtInContainers = Object.values(dockerStore.get('builtInContainers', {}))
-      .filter(c => c.autoStart && c.enabled)
+      .filter(c => c.enabled && c.autoStart)
+    
+    // 사용자 정의 컨테이너
+    const userContainers = dockerStore.get('containers', [])
+      .filter(c => c.enabled && c.autoStart)
     
     // 모든 컨테이너 합치기
-    const allContainers = [...containers, ...builtInContainers]
+    const allContainers = [...builtInContainers, ...userContainers]
+    console.log('자동 시작 대상 컨테이너:', allContainers.map(c => c.name))
     
     for (const container of allContainers) {
       try {
+        console.log(`컨테이너 ${container.name} 자동 시작 시도 중...`)
         const execPromise = promisify(exec)
         
         // 이미 실행 중인 컨테이너인지 확인
@@ -486,23 +553,25 @@ async function startAutoStartContainers() {
             console.log(`컨테이너 ${container.name}이(가) 이미 실행 중입니다.`)
             continue
           } else {
-            // 중지된 컨테이너 제거
+            console.log(`중지된 컨테이너 ${container.name} 제거 중...`)
             await execPromise(`docker rm ${container.name}`)
           }
         }
         
         // 내장 컨테이너인 경우 이미지 확인 및 빌드
         if (container.isBuiltIn && container.buildPath) {
-          await ensureBuiltInImage(container)
+          console.log(`내장 컨테이너 ${container.name}의 이미지 확인 중...`)
+          if(!await ensureBuiltInImage(container)) {
+            return { success: false, error: '내장 이미지 빌드 실패' }
+          }
         }
         
         // 컨테이너 실행
+        console.log(`컨테이너 ${container.name} 실행 중...`)
         let command = 'docker run -d'
         
         // 이름 설정
-        if (container.name) {
-          command += ` --name ${container.name}`
-        }
+        command += ` --name ${container.name}`
         
         // 포트 매핑
         if (container.ports && container.ports.length > 0) {
@@ -561,35 +630,38 @@ async function checkDockerInstalled(): Promise<boolean> {
   }
 }
 
-const buildImage = async (container: DockerContainerConfig) => {
-  if (!container.buildPath) {
-    toast({
-      title: t('docker.buildFail'),
-      description: '빌드 경로가 지정되지 않았습니다',
-      variant: 'destructive'
-    })
-    return
-  }
-  
+// 내장 컨테이너 정리
+export async function cleanupBuiltInContainers(): Promise<{ success: boolean; error?: string }> {
   try {
-    dockerStore.loadingStates[container.id] = true
-    isBuildInProgress.value = true
-    buildProgress.value = [] // 진행 상태 초기화
+    const execPromise = promisify(exec)
     
-    const imageName = 'deepchat-stt-server:0.0.1'
-    const success = await dockerStore.buildImage(container.buildPath, imageName)
+    // 내장 컨테이너 목록 가져오기
+    const builtInContainers = Object.values(dockerStore.get('builtInContainers', {}))
     
-    if (success) {
-      dockerStore.updateContainerConfig(container.id, { image: imageName })
-      await refreshData()
+    // 실행 중인 컨테이너 목록 가져오기
+    const { stdout: containerList } = await execPromise('docker ps --format "{{.Names}}"')
+    const runningContainers = containerList.trim().split('\n').filter(Boolean)
+    
+    // 각 내장 컨테이너에 대해 처리
+    for (const container of builtInContainers) {
+      if (runningContainers.includes(container.name)) {
+        try {
+          // 컨테이너 중지
+          console.log(`컨테이너 ${container.name} 중지 중...`)
+          await execPromise(`docker stop ${container.name}`)
+          
+          // 컨테이너 제거
+          console.log(`컨테이너 ${container.name} 제거 중...`)
+          await execPromise(`docker rm ${container.name}`)
+        } catch (error) {
+          console.error(`컨테이너 ${container.name} 정리 실패:`, error)
+        }
+      }
     }
+    
+    return { success: true }
   } catch (error) {
-    toast({
-      title: t('docker.buildFail'),
-      description: String(error),
-      variant: 'destructive'
-    })
-  } finally {
-    dockerStore.loadingStates[container.id] = false
+    console.error('내장 컨테이너 정리 실패:', error)
+    return { success: false, error: String(error) }
   }
 } 

@@ -1,15 +1,15 @@
 {
   "title": "Docker",
-  "enabledTitle": "Docker 설정 사용",
-  "enabledDescription": "Docker 기능을 활성화하거나 비활성화합니다.",
-  "enableToAccess": "Docker 설정을 활성화하여 Docker 컨테이너 관리 기능을 사용하세요.",
+  "enabledTitle": "Docker 활성화",
+  "enabledDescription": "Docker 기능을 활성화 또는 비활성화합니다",
+  "enableToAccess": "Docker 기능을 사용하려면 활성화해주세요",
   "enableToggleError": "Docker 설정 상태 변경에 실패했습니다.",
   "containerName": "컨테이너 이름",
   "containerNamePlaceholder": "컨테이너 이름 입력",
   "containerImage": "이미지",
   "containerImagePlaceholder": "이미지 선택",
   "availableImages": "사용 가능한 이미지",
-  "containerPorts": "포트 매핑",
+  "containerPorts": "포트",
   "containerPortsPlaceholder": "호스트포트:컨테이너포트",
   "addPort": "포트 추가",
   "containerVolumes": "볼륨 마운트",
@@ -30,11 +30,11 @@
   "removeContainerConfirm": "이 컨테이너 설정을 삭제하시겠습니까?",
   "startContainer": "컨테이너 시작",
   "stopContainer": "컨테이너 중지",
-  "notInstalled": "Docker가 설치되어 있지 않습니다",
-  "installDescription": "Docker 기능을 사용하기 위해서는 Docker Desktop을 설치해야 합니다. 아래 버튼을 클릭하여 공식 웹사이트에서 Docker Desktop을 다운로드하세요.",
-  "downloadDocker": "Docker Desktop 다운로드",
+  "notInstalled": "Docker가 설치되지 않았습니다",
+  "installDescription": "Docker 기능을 사용하려면 Docker Desktop을 설치해야 합니다",
+  "downloadDocker": "Docker 다운로드",
   "checkAgain": "다시 확인",
-  "checkingInstallation": "Docker 설치 상태 확인 중...",
+  "checkingInstallation": "Docker 설치 확인 중...",
   "buildImage": "이미지 빌드",
   "buildingImage": "이미지 빌드 중...",
   "buildSuccess": "이미지 빌드 성공",
@@ -42,7 +42,7 @@
   "containerList": "컨테이너 목록",
   "runningContainers": "실행 중인 컨테이너",
   "noRunningContainers": "실행 중인 컨테이너가 없습니다",
-  "noContainersFound": "등록된 컨테이너가 없습니다",
+  "noContainersFound": "컨테이너가 없습니다",
   "imageList": "이미지 목록",
   "noImagesFound": "이미지가 없습니다",
   "imageName": "이미지 이름",
@@ -51,16 +51,18 @@
   "imageSize": "크기",
   "imageCreatedAt": "생성일",
   "containerStatus": "상태",
-  "containerActions": "동작",
+  "containerActions": "작업",
   "running": "실행 중",
   "stopped": "중지됨",
   "refresh": "새로고침",
+  "runFail": "컨테이너 실행 실패",
+  "confirmRemoveContainer": "컨테이너를 삭제하시겠습니까?",
   "addContainerDialog": {
-    "title": "새 컨테이너 추가"
+    "title": "컨테이너 추가"
   },
   "editContainerDialog": {
-    "title": "컨테이너 편집",
-    "description": "Docker 컨테이너 설정을 편집하세요"
+    "title": "컨테이너 편집"
   },
-  "confirmRemoveContainer": "이 컨테이너를 삭제하시겠습니까?"
+  "containerExists": "컨테이너 실행 중",
+  "containerAlreadyRunning": "이미 실행 중인 컨테이너입니다"
 } 

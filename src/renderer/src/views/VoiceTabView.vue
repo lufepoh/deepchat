@@ -3,7 +3,7 @@
     <div class="flex-1 p-4 space-y-4">
       <!-- 상단 헤더 -->
       <div class="flex justify-between items-center">
-        <h2 class="text-2xl font-bold">음성 채팅</h2>
+        <h2 class="text-2xl font-bold">{{ t('voice.title') }}</h2>
         <div class="flex items-center space-x-2">
           <Button
             :variant="isListening ? 'destructive' : 'default'"
@@ -14,7 +14,7 @@
               :icon="isListening ? 'lucide:mic-off' : 'lucide:mic'"
               class="w-4 h-4 mr-2"
             />
-            {{ isListening ? '음성 인식 중지' : '음성 인식 시작' }}
+            {{ isListening ? t('voice.stopRecording') : t('voice.startRecording') }}
           </Button>
         </div>
       </div>
@@ -23,7 +23,7 @@
       <div v-if="!isServerReady" class="bg-warning/10 text-warning rounded-lg p-4">
         <div class="flex items-center">
           <Icon icon="lucide:alert-triangle" class="w-5 h-5 mr-2" />
-          <p>음성 인식 서버가 준비되지 않았습니다. 서버 상태를 확인해주세요.</p>
+          <p>{{ serverStatusMessage }}</p>
         </div>
       </div>
 
@@ -31,7 +31,7 @@
       <div v-if="!isMicAvailable" class="bg-destructive/10 text-destructive rounded-lg p-4">
         <div class="flex items-center">
           <Icon icon="lucide:alert-circle" class="w-5 h-5 mr-2" />
-          <p>마이크 접근 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.</p>
+          <p>{{ t('voice.micPermissionRequired') }}</p>
         </div>
       </div>
 
@@ -57,11 +57,20 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import Button from '@/components/ui/button/Button.vue'
+import { useDockerStore } from '@/stores/dockerStore'
+import { useToast } from '@/components/ui/toast'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const isListening = ref(false)
 const isMicAvailable = ref(false)
 const isServerReady = ref(false)
 const transcription = ref('')
+const serverStatusMessage = ref(t('voice.serverNotReady'))
+
+const dockerStore = useDockerStore()
+const { toast } = useToast()
 
 // WebSocket 연결
 const controlWs = ref<WebSocket | null>(null)
@@ -106,72 +115,85 @@ const closeWebSocketConnections = () => {
 }
 
 const checkServerStatus = async () => {
-  // 이미 연결 중이거나 연결된 상태라면 리턴
-  if (isConnecting.value || (controlWs.value?.readyState === WebSocket.OPEN && dataWs.value?.readyState === WebSocket.OPEN)) {
-    return
-  }
-
-  // 기존 연결이 있다면 정리
-  closeWebSocketConnections()
-  
   try {
-    isConnecting.value = true
-
-    // WebSocket 연결 시도
-    controlWs.value = new WebSocket('ws://localhost:8011')
-    dataWs.value = new WebSocket('ws://localhost:8012')
-
-    // 제어 WebSocket 이벤트 핸들러
-    controlWs.value.onopen = () => {
-      console.log('제어 WebSocket 연결됨')
-      if (dataWs.value?.readyState === WebSocket.OPEN) {
-        isServerReady.value = true
-      }
+    // Docker 이미지 목록 가져오기
+    const imagesResponse = await window.electron.ipcRenderer.invoke('docker:list-images')
+    if (!imagesResponse.success) {
+      throw new Error('Docker 이미지 목록을 가져오는데 실패했습니다.')
     }
 
-    controlWs.value.onclose = () => {
-      console.log('제어 WebSocket 연결 끊김')
+    // deepchat-stt-server 이미지 확인
+    const sttServerImage = imagesResponse.images.find(img => 
+      img.name === 'deepchat-stt-server' || img.name.startsWith('deepchat-stt-server:')
+    )
+
+    if (!sttServerImage) {
+      serverStatusMessage.value = t('voice.serverStatus.noImage')
       isServerReady.value = false
+      return
     }
 
-    controlWs.value.onerror = (error) => {
-      console.error('제어 WebSocket 오류:', error)
-      isServerReady.value = false
+    // 컨테이너 목록 가져오기
+    const containersResponse = await window.electron.ipcRenderer.invoke('docker:list-containers')
+    if (!containersResponse.success) {
+      throw new Error('Docker 컨테이너 목록을 가져오는데 실패했습니다.')
     }
 
-    // 데이터 WebSocket 이벤트 핸들러
-    dataWs.value.onopen = () => {
-      console.log('데이터 WebSocket 연결됨')
-      if (controlWs.value?.readyState === WebSocket.OPEN) {
-        isServerReady.value = true
-      }
+    // deepchat-stt-server 컨테이너 확인
+    const sttContainer = containersResponse.containers.find(container => 
+      container.name === 'deepchat-stt-server'
+    )
+
+    if (!sttContainer) {
+      // 컨테이너가 없으면 실행
+      await startSTTContainer()
+    } else if (!sttContainer.isRunning) {
+      // 컨테이너가 있지만 실행중이 아니면 삭제 후 재실행
+      await window.electron.ipcRenderer.invoke('docker:remove-container', sttContainer.id)
+      await startSTTContainer()
+    } else {
+      // 컨테이너가 실행중이면 준비 완료
+      isServerReady.value = true
+      serverStatusMessage.value = t('voice.serverStatus.running')
     }
 
-    dataWs.value.onmessage = (event) => {
-      try {
-        const response = JSON.parse(event.data)
-        if (response.type === 'realtime') {
-          transcription.value = response.text
-        }
-      } catch (e) {
-        console.error('음성 인식 결과 파싱 실패:', e)
-      }
-    }
-
-    dataWs.value.onclose = () => {
-      console.log('데이터 WebSocket 연결 끊김')
-      isServerReady.value = false
-    }
-
-    dataWs.value.onerror = (error) => {
-      console.error('데이터 WebSocket 오류:', error)
-      isServerReady.value = false
-    }
-  } catch (error) {
-    console.error('서버 연결 실패:', error)
+  } catch (error: unknown) {
+    console.error('서버 상태 확인 실패:', error)
+    serverStatusMessage.value = t('voice.serverStatus.error', {
+      message: error instanceof Error ? error.message : String(error)
+    })
     isServerReady.value = false
-  } finally {
-    isConnecting.value = false
+  }
+}
+
+// STT 컨테이너 실행
+const startSTTContainer = async () => {
+  try {
+    // 내장 컨테이너 설정 가져오기
+    const configResponse = await window.electron.ipcRenderer.invoke('docker:load-config')
+    if (!configResponse.success) {
+      throw new Error('Docker 설정을 불러오는데 실패했습니다.')
+    }
+
+    const sttConfig = configResponse.config.builtInContainers.sttServer
+    if (!sttConfig) {
+      throw new Error('STT 서버 설정을 찾을 수 없습니다.')
+    }
+
+    // 컨테이너 실행
+    const runResponse = await window.electron.ipcRenderer.invoke('docker:run-container', sttConfig)
+    if (!runResponse.success) {
+      throw new Error('STT 서버 실행에 실패했습니다.')
+    }
+
+    isServerReady.value = true
+    serverStatusMessage.value = t('voice.serverStatus.running')
+  } catch (error: unknown) {
+    console.error('STT 서버 실행 실패:', error)
+    serverStatusMessage.value = t('voice.serverStatus.startError', {
+      message: error instanceof Error ? error.message : String(error)
+    })
+    isServerReady.value = false
   }
 }
 

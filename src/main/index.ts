@@ -7,7 +7,7 @@ import fs from 'fs'
 import { eventBus } from './eventbus'
 import { WINDOW_EVENTS } from './events'
 import { setLoggingEnabled } from '@shared/logger'
-import { initDocker } from './docker'
+import { initDocker, cleanupBuiltInContainers } from './docker'
 import { registerExternalLinkHandler } from './libs/ipc'
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -53,6 +53,25 @@ app.whenReady().then(() => {
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
+      
+      // 윈도우 닫기 이벤트 처리
+      window.on('close', async (e) => {
+        e.preventDefault()
+        console.log('Window close event triggered')
+        
+        try {
+          // Docker 컨테이너 정리
+          console.log('Cleaning up Docker containers...')
+          await cleanupBuiltInContainers()
+          console.log('Docker containers cleaned up')
+          
+          // 윈도우 닫기
+          window.destroy()
+        } catch (error) {
+          console.error('Error during cleanup:', error)
+          window.destroy()
+        }
+      })
     })
 
     // 创建主窗口
@@ -121,13 +140,39 @@ app.whenReady().then(() => {
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  presenter.destroy()
-  if (process.platform !== 'darwin') {
+app.on('window-all-closed', async () => {
+  console.log('All windows closed event triggered')
+  try {
+    // Docker 컨테이너 정리
+    console.log('Cleaning up Docker containers...')
+    await cleanupBuiltInContainers()
+    console.log('Docker containers cleaned up')
+    
+    presenter.destroy()
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
+  } catch (error) {
+    console.error('Error during cleanup:', error)
     app.quit()
   }
 })
 
-app.on('before-quit', () => {
-  presenter.destroy()
+// 앱 종료 전 정리
+app.on('before-quit', async (event) => {
+  console.log('Before quit event triggered')
+  event.preventDefault()
+  
+  try {
+    // Docker 컨테이너 정리
+    console.log('Cleaning up Docker containers...')
+    await cleanupBuiltInContainers()
+    console.log('Docker containers cleaned up')
+    
+    presenter.destroy()
+    app.exit()
+  } catch (error) {
+    console.error('Error during cleanup:', error)
+    app.exit()
+  }
 })

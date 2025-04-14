@@ -11,7 +11,6 @@ export { default as ToastTitle } from './ToastTitle.vue'
 export { default as ToastViewport } from './ToastViewport.vue'
 export { toast, useToast } from './use-toast'
 
-import type { VariantProps } from 'class-variance-authority'
 import { cva } from 'class-variance-authority'
 
 export const toastVariants = cva(
@@ -30,10 +29,8 @@ export const toastVariants = cva(
   },
 )
 
-type ToastVariants = VariantProps<typeof toastVariants>
-
-export interface ToastProps extends ToastRootProps {
-  class?: HTMLAttributes['class']
-  variant?: ToastVariants['variant']
+export interface ToastProps extends ToastRootProps, /* @vue-ignore */ HTMLAttributes {
+  class?: string
+  variant?: 'default' | 'destructive'
   onOpenChange?: ((value: boolean) => void) | undefined
 }

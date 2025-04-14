@@ -1,5 +1,4 @@
 import { clipboard, contextBridge, nativeImage, webUtils } from 'electron'
-import { exposeElectronAPI } from '@electron-toolkit/preload'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
@@ -15,7 +14,6 @@ const api = {
     return webUtils.getPathForFile(file)
   }
 }
-exposeElectronAPI()
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise

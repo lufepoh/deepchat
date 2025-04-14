@@ -1,28 +1,28 @@
-<template>
+RUN_CONTAINER<template>
   <div class="flex-1 overflow-y-auto p-4">
     <form @submit.prevent="handleSubmit" class="space-y-6">
       <div class="grid gap-4">
         <!-- 이름 -->
         <div class="grid gap-2">
-          <Label for="name">{{ t('settings.docker.containerName') }}</Label>
+          <Label for="name">{{ t('docker.containerName') }}</Label>
           <Input
             id="name"
             v-model="formData.name"
-            :placeholder="t('settings.docker.containerNamePlaceholder')"
+            :placeholder="t('docker.containerNamePlaceholder')"
             required
           />
         </div>
 
         <!-- 이미지 -->
         <div class="grid gap-2">
-          <Label for="image">{{ t('settings.docker.containerImage') }}</Label>
+          <Label for="image">{{ t('docker.containerImage') }}</Label>
           <Select v-model="formData.image">
             <SelectTrigger>
-              <SelectValue :placeholder="t('settings.docker.containerImagePlaceholder')" />
+              <SelectValue :placeholder="t('docker.containerImagePlaceholder')" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectLabel>{{ t('settings.docker.availableImages') }}</SelectLabel>
+                <SelectLabel>{{ t('docker.availableImages') }}</SelectLabel>
                 <SelectItem v-for="image in images" :key="image.id" :value="`${image.name}:${image.tag}`">
                   {{ image.name }}:{{ image.tag }} ({{ image.size }})
                 </SelectItem>
@@ -33,11 +33,11 @@
 
         <!-- 포트 매핑 -->
         <div class="grid gap-2">
-          <Label>{{ t('settings.docker.containerPorts') }}</Label>
+          <Label>{{ t('docker.containerPorts') }}</Label>
           <div v-for="(port, index) in formData.ports" :key="`port-${index}`" class="flex gap-2">
             <Input
               v-model="formData.ports[index]"
-              :placeholder="t('settings.docker.containerPortsPlaceholder')"
+              :placeholder="t('docker.containerPortsPlaceholder')"
             />
             <Button
               type="button"
@@ -57,13 +57,13 @@
             class="mt-2"
           >
             <Icon icon="lucide:plus" class="mr-2 h-4 w-4" />
-            {{ t('settings.docker.addPort') }}
+            {{ t('docker.addPort') }}
           </Button>
         </div>
 
         <!-- 볼륨 마운트 -->
         <div class="grid gap-2">
-          <Label>{{ t('settings.docker.containerVolumes') }}</Label>
+          <Label>{{ t('docker.containerVolumes') }}</Label>
           <div
             v-for="(volume, index) in formData.volumes"
             :key="`volume-${index}`"
@@ -71,7 +71,7 @@
           >
             <Input
               v-model="formData.volumes[index]"
-              :placeholder="t('settings.docker.containerVolumesPlaceholder')"
+              :placeholder="t('docker.containerVolumesPlaceholder')"
             />
             <Button
               type="button"
@@ -85,17 +85,17 @@
           </div>
           <Button type="button" variant="outline" size="sm" @click="addVolume" class="mt-2">
             <Icon icon="lucide:plus" class="mr-2 h-4 w-4" />
-            {{ t('settings.docker.addVolume') }}
+            {{ t('docker.addVolume') }}
           </Button>
         </div>
 
         <!-- 환경 변수 -->
         <div class="grid gap-2">
-          <Label>{{ t('settings.docker.containerEnv') }}</Label>
+          <Label>{{ t('docker.containerEnv') }}</Label>
           <div v-for="(env, index) in formData.env" :key="`env-${index}`" class="flex gap-2">
             <Input
               v-model="formData.env[index]"
-              :placeholder="t('settings.docker.containerEnvPlaceholder')"
+              :placeholder="t('docker.containerEnvPlaceholder')"
             />
             <Button
               type="button"
@@ -109,17 +109,17 @@
           </div>
           <Button type="button" variant="outline" size="sm" @click="addEnv" class="mt-2">
             <Icon icon="lucide:plus" class="mr-2 h-4 w-4" />
-            {{ t('settings.docker.addEnv') }}
+            {{ t('docker.addEnv') }}
           </Button>
         </div>
 
         <!-- 명령어 인자 -->
         <div class="grid gap-2">
-          <Label>{{ t('settings.docker.containerArgs') }}</Label>
+          <Label>{{ t('docker.containerArgs') }}</Label>
           <div v-for="(arg, index) in formData.args" :key="`arg-${index}`" class="flex gap-2">
             <Input
               v-model="formData.args[index]"
-              :placeholder="t('settings.docker.containerArgsPlaceholder')"
+              :placeholder="t('docker.containerArgsPlaceholder')"
             />
             <Button
               type="button"
@@ -133,24 +133,24 @@
           </div>
           <Button type="button" variant="outline" size="sm" @click="addArg" class="mt-2">
             <Icon icon="lucide:plus" class="mr-2 h-4 w-4" />
-            {{ t('settings.docker.addArg') }}
+            {{ t('docker.addArg') }}
           </Button>
         </div>
 
         <!-- 작업 디렉토리 -->
         <div class="grid gap-2">
-          <Label for="workingDir">{{ t('settings.docker.containerWorkingDir') }}</Label>
+          <Label for="workingDir">{{ t('docker.containerWorkingDir') }}</Label>
           <Input
             id="workingDir"
             v-model="formData.workingDir"
-            :placeholder="t('settings.docker.containerWorkingDirPlaceholder')"
+            :placeholder="t('docker.containerWorkingDirPlaceholder')"
           />
         </div>
 
         <!-- 자동 시작 설정 -->
         <div class="flex items-center space-x-2">
           <Checkbox id="autoStart" v-model:checked="formData.autoStart" />
-          <Label for="autoStart">{{ t('settings.docker.containerAutoStart') }}</Label>
+          <Label for="autoStart">{{ t('docker.containerAutoStart') }}</Label>
         </div>
       </div>
 
