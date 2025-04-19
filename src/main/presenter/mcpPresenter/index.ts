@@ -9,8 +9,9 @@ import {
 import { ServerManager } from './serverManager'
 import { ToolManager } from './toolManager'
 import { eventBus } from '@/eventbus'
-import { MCP_EVENTS } from '@/events'
+import { MCP_EVENTS, NOTIFICATION_EVENTS } from '@/events'
 import { IConfigPresenter } from '@shared/presenter'
+import { getErrorMessageLabels } from '@shared/i18n'
 
 // 定义MCP工具接口
 interface MCPTool {
@@ -224,13 +225,45 @@ export class McpPresenter implements IMCPPresenter {
   }
 
   // 添加MCP服务器
-  async addMcpServer(serverName: string, config: MCPServerConfig): Promise<void> {
+  async addMcpServer(serverName: string, config: MCPServerConfig): Promise<boolean> {
+    const existingServers = await this.getMcpServers()
+    if (existingServers[serverName]) {
+      console.error(`[MCP] 添加服务器失败: 服务器名称 "${serverName}" 已存在。`)
+      // 获取当前语言并发送通知
+      const locale = this.configPresenter.getLanguage?.() || 'zh-CN'
+      const errorMessages = getErrorMessageLabels(locale)
+      eventBus.emit(NOTIFICATION_EVENTS.SHOW_ERROR, {
+        title: errorMessages.addMcpServerErrorTitle || '添加服务器失败',
+        message:
+          errorMessages.addMcpServerDuplicateMessage?.replace('{serverName}', serverName) ||
+          `服务器名称 "${serverName}" 已存在。请选择一个不同的名称。`,
+        id: `mcp-error-add-server-${serverName}-${Date.now()}`,
+        type: 'error'
+      })
+      return false
+    }
     await this.configPresenter.addMcpServer(serverName, config)
+    return true
   }
 
   // 更新MCP服务器配置
   async updateMcpServer(serverName: string, config: Partial<MCPServerConfig>): Promise<void> {
+    const wasRunning = this.serverManager.isServerRunning(serverName)
     await this.configPresenter.updateMcpServer(serverName, config)
+
+    // 如果服务器之前正在运行，则重启它以应用新配置
+    if (wasRunning) {
+      console.log(`[MCP] 配置已更新，正在重启服务器: ${serverName}`)
+      try {
+        await this.stopServer(serverName) // stopServer 会发出 SERVER_STOPPED 事件
+        await this.startServer(serverName) // startServer 会发出 SERVER_STARTED 事件
+        console.log(`[MCP] 服务器 ${serverName} 重启成功`)
+      } catch (error) {
+        console.error(`[MCP] 重启服务器 ${serverName} 失败:`, error)
+        // 即使重启失败，也要确保状态正确，标记为未运行
+        eventBus.emit(MCP_EVENTS.SERVER_STOPPED, serverName)
+      }
+    }
   }
 
   // 移除MCP服务器

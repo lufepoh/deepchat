@@ -11,17 +11,35 @@ import { useChatStore } from '@/stores/chat'
 import { NOTIFICATION_EVENTS } from './events'
 import { useToast } from './components/ui/toast/use-toast'
 import Toaster from './components/ui/toast/Toaster.vue'
+import { useSettingsStore } from '@/stores/settings'
 
 const route = useRoute()
 const configPresenter = usePresenter('configPresenter')
 const artifactStore = useArtifactStore()
 const chatStore = useChatStore()
 const { toast } = useToast()
+const settingsStore = useSettingsStore()
 
 // 错误通知队列及当前正在显示的错误
 const errorQueue = ref<Array<{ id: string; title: string; message: string; type: string }>>([])
 const currentErrorId = ref<string | null>(null)
 const errorDisplayTimer = ref<number | null>(null)
+
+// 监听主题和字体大小变化，直接更新 body class
+watch(
+  [() => settingsStore.theme, () => settingsStore.fontSizeClass],
+  ([newTheme, newFontSizeClass], [oldTheme, oldFontSizeClass]) => {
+    if (oldTheme) {
+      document.documentElement.classList.remove(oldTheme)
+    }
+    if (oldFontSizeClass) {
+      document.documentElement.classList.remove(oldFontSizeClass)
+    }
+    document.documentElement.classList.add(newTheme)
+    document.documentElement.classList.add(newFontSizeClass)
+  },
+  { immediate: false } // 初始化在 onMounted 中处理
+)
 
 // 处理错误通知
 const showErrorToast = (error: { id: string; title: string; message: string; type: string }) => {
@@ -31,6 +49,9 @@ const showErrorToast = (error: { id: string; title: string; message: string; typ
   if (existingErrorIndex === -1) {
     // 如果当前有错误正在展示，将新错误放入队列
     if (currentErrorId.value) {
+      if (errorQueue.value.length > 5) {
+        errorQueue.value.shift()
+      }
       errorQueue.value.push(error)
     } else {
       // 否则直接展示这个错误
@@ -45,7 +66,7 @@ const displayError = (error: { id: string; title: string; message: string; type:
   currentErrorId.value = error.id
 
   // 显示错误通知
-  toast({
+  const { dismiss } = toast({
     title: error.title,
     description: error.message,
     variant: 'destructive',
@@ -63,7 +84,9 @@ const displayError = (error: { id: string; title: string; message: string; type:
   }
 
   errorDisplayTimer.value = window.setTimeout(() => {
+    console.log('errorDisplayTimer.value', errorDisplayTimer.value)
     // 处理错误关闭后的逻辑
+    dismiss()
     handleErrorClosed()
   }, 3000)
 }
@@ -101,6 +124,10 @@ const getInitComplete = async () => {
 getInitComplete()
 
 onMounted(() => {
+  // 设置初始 body class
+  document.body.classList.add(settingsStore.theme)
+  document.body.classList.add(settingsStore.fontSizeClass)
+
   // 监听全局错误通知事件
   window.electron.ipcRenderer.on(NOTIFICATION_EVENTS.SHOW_ERROR, (_event, error) => {
     showErrorToast(error)

@@ -9,9 +9,27 @@ import path from 'path'
 import { presenter } from '@/presenter'
 import { app } from 'electron'
 import fs from 'fs'
-import { proxyConfig } from '@/presenter/proxyConfig'
+import { NO_PROXY, proxyConfig } from '@/presenter/proxyConfig'
 import { getInMemoryServer } from './inMemoryServers/builder'
-import { StreamableHTTPClientTransport } from './streamableHttp'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+// TODO: resources 和 prompts 的类型,Notifactions 的类型 https://github.com/modelcontextprotocol/typescript-sdk/blob/main/src/examples/client/simpleStreamableHttp.ts
+// 简单的 OAuth 提供者，用于处理 Bearer Token
+class SimpleOAuthProvider {
+  private token: string | null = null
+
+  constructor(authHeader: string | undefined) {
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+      this.token = authHeader.substring(7) // 移除 'Bearer ' 前缀
+    }
+  }
+
+  async tokens(): Promise<{ access_token: string } | null> {
+    if (this.token) {
+      return { access_token: this.token }
+    }
+    return null
+  }
+}
 
 // 确保 TypeScript 能够识别 SERVER_STATUS_CHANGED 属性
 type MCPEventsType = typeof MCP_EVENTS & {
@@ -127,6 +145,18 @@ export class McpClient {
 
     try {
       console.info(`正在启动MCP服务器 ${this.serverName}...`, this.serverConfig)
+
+      // 处理 customHeaders 和 AuthProvider
+      let authProvider: SimpleOAuthProvider | null = null
+      const customHeaders = this.serverConfig.customHeaders
+        ? { ...(this.serverConfig.customHeaders as Record<string, string>) } // 创建副本以进行修改
+        : {}
+
+      if (customHeaders.Authorization) {
+        authProvider = new SimpleOAuthProvider(customHeaders.Authorization)
+        delete customHeaders.Authorization // 从 headers 中移除，因为它将由 AuthProvider 处理
+      }
+
       if (this.serverConfig.type === 'inmemory') {
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
         const _args = Array.isArray(this.serverConfig.args) ? this.serverConfig.args : []
@@ -216,6 +246,7 @@ export class McpClient {
           env.http_proxy = proxyUrl
           env.https_proxy = proxyUrl
           env.grpc_proxy = proxyUrl
+          env.no_proxy = NO_PROXY
         }
         if (this.npmRegistry) {
           env.npm_config_registry = this.npmRegistry
@@ -269,10 +300,19 @@ export class McpClient {
           stderr: 'pipe'
         })
       } else if (this.serverConfig.baseUrl && this.serverConfig.type === 'sse') {
-        this.transport = new SSEClientTransport(new URL(this.serverConfig.baseUrl as string))
+        this.transport = new SSEClientTransport(new URL(this.serverConfig.baseUrl as string), {
+          requestInit: { headers: customHeaders },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          authProvider: (authProvider ?? undefined) as any
+        })
       } else if (this.serverConfig.baseUrl && this.serverConfig.type === 'http') {
         this.transport = new StreamableHTTPClientTransport(
-          new URL(this.serverConfig.baseUrl as string)
+          new URL(this.serverConfig.baseUrl as string),
+          {
+            requestInit: { headers: customHeaders },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            authProvider: (authProvider ?? undefined) as any
+          }
         )
       } else {
         throw new Error(`不支持的传输类型: ${this.serverConfig.type}`)

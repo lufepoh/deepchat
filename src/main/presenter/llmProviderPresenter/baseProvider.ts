@@ -6,7 +6,8 @@ import {
   MCPToolDefinition
 } from '@shared/presenter'
 import { ConfigPresenter } from '../configPresenter'
-
+import { DevicePresenter } from '../devicePresenter'
+import { jsonrepair } from 'jsonrepair'
 // 定义ChatMessage接口用于统一消息格式
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -52,6 +53,7 @@ export abstract class BaseLLMProvider {
   constructor(provider: LLM_PROVIDER, configPresenter: ConfigPresenter) {
     this.provider = provider
     this.configPresenter = configPresenter
+    this.defaultHeaders = DevicePresenter.getDefaultHeaders()
   }
 
   /**
@@ -217,30 +219,46 @@ export abstract class BaseLLMProvider {
    * @returns 格式化的提示词
    */
   protected getFunctionCallWrapPrompt(tools: MCPToolDefinition[]): string {
-    return `
-    你将根据用户的问题，选择合适的工具，并调用工具来解决问题，工具会以一个JSON数组的格式提供给你，内容在tool_list标签中:
-    <tool_list>
-  ${JSON.stringify(tools)}
-    </tool_list>
-    当需要使用工具时，你必须严格按照以下格式回复，保证函数调用的信息在function_call的标签中,每个标签有且只能有一个调用,如果需要调用多个工具,你需要生成多个function_call标签:
+    return `你具备调用外部工具的能力来协助解决用户的问题。可用的工具列表定义在 <tool_list> 标签中，格式为 JSON 数组：
+<tool_list>
+${JSON.stringify(tools)}
+</tool_list>
+
+当你判断调用工具是**解决用户问题的唯一或最佳方式**时，**必须**严格遵循以下格式进行回复。你的回复中**仅**包含 <function_call> 标签及其内容，不要包含任何其他文字、解释或评论。
+
+如果需要连续调用多个工具，请为每个工具生成一个独立的 <function_call> 标签，按顺序排列。
+
+工具调用的格式如下：
 <function_call>
 {
   "function_call": {
-    "name": "<函数名称>",
-    "arguments": { /* 参数对象，要求为有效 JSON 格式 */ }
+    "name": "工具名称",
+    "arguments": { // 参数对象，必须是有效的 JSON 格式
+      "参数1": "值1",
+      "参数2": "值2"
+      // ... 其他参数
+    }
   }
 }
 </function_call>
-    例如，如果你需要调用函数 "getWeather" 并传入 "location" 和 "date"，请返回如下格式：
-    <function_call>
-   {
-      "function_call": {
-        "name": "getWeather",
-        "arguments": { "location": "Beijing", "date": "2025-03-20" }
-      }
-    }
-    </function_call>
-    `
+
+**重要约束:**
+1.  **必要性**: 仅在无法直接回答用户问题，且工具能提供必要信息或执行必要操作时才使用工具。
+2.  **准确性**: \`name\` 字段必须**精确匹配** <tool_list> 中提供的某个工具的名称。\`arguments\` 字段必须是一个有效的 JSON 对象，包含该工具所需的**所有**参数及其基于用户请求的**准确**值。
+3.  **格式**: 如果决定调用工具，你的回复**必须且只能**包含一个或多个 <function_call> 标签，不允许任何前缀、后缀或解释性文本。
+4.  **直接回答**: 如果你可以直接、完整地回答用户的问题，请**不要**使用工具，直接生成回答内容。
+5.  **避免猜测**: 如果不确定信息，且有合适的工具可以获取该信息，请使用工具而不是猜测。
+
+例如，假设你需要调用名为 "getWeather" 的工具，并提供 "location" 和 "date" 参数，你应该这样回复（注意，回复中只有标签）：
+<function_call>
+{
+  "function_call": {
+    "name": "getWeather",
+    "arguments": { "location": "北京", "date": "2025-03-20" }
+  }
+}
+</function_call>
+`
   }
 
   /**
@@ -266,17 +284,80 @@ export abstract class BaseLLMProvider {
         .map((match) => {
           const content = match.replace(/<function_call>|<\/function_call>/g, '').trim()
           try {
-            const parsedCall = JSON.parse(content)
+            // 尝试解析多种可能的格式
+            let parsedCall
+            try {
+              // 首先尝试直接解析JSON
+              parsedCall = JSON.parse(content)
+            } catch (initialParseError) {
+              try {
+                // 如果直接解析失败，尝试使用jsonrepair修复
+                parsedCall = JSON.parse(jsonrepair(content))
+              } catch (repairError) {
+                // 记录错误日志但不中断处理
+                console.error('Failed to parse with jsonrepair:', repairError)
+                return null
+              }
+            }
+
+            // 支持不同格式：
+            // 1. { "function_call": { "name": "...", "arguments": {...} } }
+            // 2. { "name": "...", "arguments": {...} }
+            // 3. { "function": { "name": "...", "arguments": {...} } }
+            // 4. { "function_call": { "name": "...", "arguments": "..." } }
+            let functionName, functionArgs
+
+            if (parsedCall.function_call) {
+              // 格式1,4
+              functionName = parsedCall.function_call.name
+              functionArgs = parsedCall.function_call.arguments
+            } else if (parsedCall.name && parsedCall.arguments !== undefined) {
+              // 格式2
+              functionName = parsedCall.name
+              functionArgs = parsedCall.arguments
+            } else if (parsedCall.function && parsedCall.function.name) {
+              // 格式3
+              functionName = parsedCall.function.name
+              functionArgs = parsedCall.function.arguments
+            } else {
+              // 当没有明确匹配时，尝试从对象中推断
+              const keys = Object.keys(parsedCall)
+              // 如果对象只有一个键，可能是嵌套的自定义格式
+              if (keys.length === 1) {
+                const firstKey = keys[0]
+                const innerObject = parsedCall[firstKey]
+
+                if (innerObject && typeof innerObject === 'object') {
+                  // 可能是一个嵌套对象，查找name和arguments字段
+                  if (innerObject.name && innerObject.arguments !== undefined) {
+                    functionName = innerObject.name
+                    functionArgs = innerObject.arguments
+                  }
+                }
+              }
+
+              // 如果仍未找到格式，记录错误
+              if (!functionName || functionArgs === undefined) {
+                console.error('Unknown function call format:', parsedCall)
+                return null
+              }
+            }
+
+            // 确保arguments是字符串形式的JSON
+            if (typeof functionArgs !== 'string') {
+              functionArgs = JSON.stringify(functionArgs)
+            }
+
             return {
-              id: parsedCall.function_call.name,
+              id: functionName,
               type: 'function',
               function: {
-                name: parsedCall.function_call.name,
-                arguments: JSON.stringify(parsedCall.function_call.arguments)
+                name: functionName,
+                arguments: functionArgs
               }
             }
           } catch (parseError) {
-            console.error('Error parsing function call JSON:', parseError)
+            console.error('Error parsing function call JSON:', parseError, match, content)
             return null
           }
         })

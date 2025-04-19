@@ -203,7 +203,7 @@ export class PowerpackServer {
           description:
             'Get detailed content information from a specified webpage. Extract title, description, main content, and other information. ' +
             'This tool is useful for analyzing webpage content, obtaining article summaries or details. ' +
-            'Just provide a valid URL to get complete webpage content analysis.',
+            'Just provide a valid HTTP or HTTPS URL to get complete webpage content analysis.',
           inputSchema: zodToJsonSchema(GetWebInfoArgsSchema) as ToolInput
         }
       ]
@@ -214,6 +214,7 @@ export class PowerpackServer {
           name: 'run_node_code',
           description:
             'Execute simple Node.js code in a secure sandbox environment. Suitable for calculations, data transformations, encryption/decryption, and network operations. ' +
+            'The code needs to be output to the console, and the output content needs to be formatted as a string. ' +
             'For security reasons, the code cannot perform file operations, modify system settings, spawn child processes, or execute external code from network. ' +
             'Code execution has a timeout limit, default is 5 seconds, you can adjust it based on the estimated time of the code, generally not recommended to exceed 2 minutes. ' +
             'When a problem can be solved by a simple and secure Node.js code or you have generated a simple code for the user and want to execute it, please use this tool, providing more reliable information to the user.',

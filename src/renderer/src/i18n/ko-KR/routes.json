@@ -2,12 +2,15 @@
   "chat": "채팅",
   "voice": "음성",
   "settings": "설정",
-  "settings-common": "일반",
-  "settings-provider": "모델 프로바이더",
+  "settings-common": "일반 설정",
+  "settings-provider": "제공자 설정",
+  "settings-about": "정보",
+  "settings-database": "데이터 설정",
   "settings-mcp": "MCP 설정",
   "settings-docker": "Docker 설정",
   "settings-database": "데이터베이스 설정",
   "settings-shortcut": "단축키 설정",
   "settings-about": "정보",
+  "settings-display": "디스플레이 설정",
   "welcome": "환영합니다"
 }

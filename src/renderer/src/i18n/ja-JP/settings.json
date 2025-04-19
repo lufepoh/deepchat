@@ -249,7 +249,10 @@
       "typeHttp": "ストリーミングHTTPリクエスト（HTTP）",
       "typeInMemory": "メモリ",
       "browseMarketplace": "MCPサービス市場を閲覧します",
-      "imageModel": "視覚モデルを選択します"
+      "imageModel": "視覚モデルを選択します",
+      "customHeadersParseError": "カスタムヘッダーの解析は失敗しました",
+      "customHeaders": "カスタムリクエストヘッダー",
+      "invalidKeyValueFormat": "誤ったリクエストヘッダー形式、入力が正しいかどうかを確認してください。"
     },
     "deleteServer": "サーバーを削除",
     "editServer": "サーバーを編集",
@@ -288,5 +291,13 @@
     "checkUpdate": "更新を確認",
     "checking": "確認中...",
     "latestVersion": "最新バージョン"
+  },
+  "display": {
+    "fontSize": "テキストサイズ",
+    "text-2xl": "非常に大きい",
+    "text-base": "デフォルト",
+    "text-lg": "大きい",
+    "text-sm": "小さい",
+    "text-xl": "非常に大きい"
   }
 }

@@ -103,7 +103,7 @@ defineProps<{
   modelValue: string
 }>()
 
-defineEmits<{
+const emits = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
@@ -117,6 +117,8 @@ const handleProfileClick = async () => {
   } else {
     settings.openUpdateDialog()
   }
+
+  emits('update:modelValue', 'settings')
 }
 
 // 监听更新状态变化，当有新更新时自动显示更新弹窗
