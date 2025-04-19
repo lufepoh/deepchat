@@ -236,6 +236,31 @@ const startListening = async () => {
       .connect(audioContext.value.destination)
 
     isListening.value = true
+
+    // WebSocket 연결 설정
+    const wsUrl = `ws://localhost:8012` // STT 서버의 데이터 WebSocket URL
+    dataWs.value = new WebSocket(wsUrl)
+    
+    // WebSocket 메시지 수신 처리
+    dataWs.value.onmessage = (event) => {
+      try {
+        const response = JSON.parse(event.data)
+        
+        // 실시간 음성 인식 결과 처리
+        if (response.type === 'realtime') {
+          console.log('[STT 실시간 인식]:', response.text)
+          transcription.value = response.text
+        }
+        // 전체 문장 인식 결과 처리
+        else if (response.type === 'fullSentence') {
+          console.log('[STT 전체 문장]:', response.text)
+          transcription.value = response.text
+        }
+      } catch (error) {
+        console.error('WebSocket 메시지 처리 오류:', error)
+      }
+    }
+
   } catch (error) {
     console.error('오디오 스트림 시작 오류:', error)
     stopListening()

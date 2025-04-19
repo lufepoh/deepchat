@@ -15,7 +15,7 @@ const router = createRouter({
     {
       path: '/voice',
       name: 'voice',
-      component: VoiceTabView,
+      component: () => import('@/views/VoiceTabView.vue'),
       meta: {
         titleKey: 'routes.voice',
         icon: 'lucide:mic'

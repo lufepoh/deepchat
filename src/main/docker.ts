@@ -45,6 +45,7 @@ export interface DockerContainerConfig {
   isBuiltIn?: boolean
   buildPath?: string
   description?: string
+  gpus?: string
 }
 
 // 내장 Docker 컨테이너 설정
@@ -61,7 +62,8 @@ const DEFAULT_BUILTIN_CONTAINERS: Record<string, DockerContainerConfig> = {
     autoStart: true,
     isBuiltIn: true,
     buildPath: path.join(process.cwd(), 'src', 'main', 'docker-services', 'deepchat-stt-server'),
-    description: '실시간 음성 인식 STT 서버'
+    description: '실시간 음성 인식 STT 서버',
+    gpus: 'all'
   }
 }
 
@@ -184,6 +186,11 @@ export async function initDocker() {
       // 이름 설정
       if (config.name) {
         command += ` --name ${config.name}`
+      }
+      
+      // GPU 설정
+      if (config.gpus) {
+        command += ` --gpus ${config.gpus}`
       }
       
       // 포트 매핑
@@ -459,7 +466,8 @@ async function updateBuiltInContainers() {
           isBuiltIn: true,
           buildPath: value.buildPath,
           autoStart: true, // 자동 시작 항상 활성화
-          enabled: true // 항상 활성화
+          enabled: true, // 항상 활성화
+          gpus: value.gpus
         }
       }
     }
@@ -572,6 +580,11 @@ async function startAutoStartContainers() {
         
         // 이름 설정
         command += ` --name ${container.name}`
+        
+        // GPU 옵션이 누락됨
+        if (container.gpus) {
+          command += ` --gpus ${container.gpus}`
+        }
         
         // 포트 매핑
         if (container.ports && container.ports.length > 0) {
