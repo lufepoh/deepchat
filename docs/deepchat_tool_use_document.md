@@ -1,166 +1,160 @@
 
-# DeepChat Tool Use 技术文档
+# DeepChat Tool Use 기술 문서
 
-## 背景与目标
+## 배경 및 목표
 
-随着 LLM (大模型) 支持 Function Calling 能力的增强，DeepChat 通过**提示词工程（prompt engineering）**，即使在不依赖原生 function calling 的情况下，也能**模拟 Tool Use 行为**。
+LLM(대형 언어 모델)의 Function Calling 기능이 강화됨에 따라, DeepChat은 **프롬프트 엔지니어링(prompt engineering)**을 통해 **네이티브 Function Calling 없이도 Tool Use 동작을 시뮬레이션**할 수 있도록 지원합니다.
 
-设计目标：
-- 通过标准化 prompt 包装，引导模型以规范格式调用 Tool
-- 适配各类 LLM，包括不支持原生 Function Calling 的模型
-- 支持扩展到多 Tool 使用和复杂调度场景
-
----
-
-## 结构概览
-
-| 组件                          | 说明                                                            |
-| :---------------------------- | :-------------------------------------------------------------- |
-| `baseProvider.ts`             | 定义基础 prompt 封装和 Tool Use 逻辑                            |
-| `openAICompatibleProvider.ts` | 实现与 OpenAI 等接口兼容的交互和 function call 解析             |
-| 核心函数                      | `getFunctionCallWrapPrompt`、`coreStream`、`parseFunctionCalls` |
+설계 목표:
+- 표준화된 프롬프트 포장을 통해 모델이 도구를 정해진 형식으로 호출하도록 유도
+- Function Calling을 지원하지 않는 다양한 LLM 모델과의 호환성 확보
+- 다중 Tool 사용 및 복잡한 스케줄링 시나리오 확장 지원
 
 ---
 
-## 总流程概览
+## 구조 개요
 
-1. **Prompt 封装**：用 `getFunctionCallWrapPrompt` 包装用户输入和 Tools
-2. **流式处理**：用 `coreStream` 接收模型返回的 delta 流
-3. **函数调用解析**：用 `parseFunctionCalls` 从自然语言中提取 Tool Call JSON
+| 구성 요소                     | 설명                                                             |
+| :--------------------------- | :--------------------------------------------------------------- |
+| `baseProvider.ts`            | 기본 프롬프트 포장 및 Tool Use 로직 정의                         |
+| `openAICompatibleProvider.ts`| OpenAI 등과 호환되는 인터페이스 구현 및 function call 파싱 구현 |
+| 핵심 함수                    | `getFunctionCallWrapPrompt`, `coreStream`, `parseFunctionCalls` |
 
 ---
 
-## 核心模块详解
+## 전체 흐름 개요
+
+1. **프롬프트 포장**: `getFunctionCallWrapPrompt`로 사용자 입력과 Tools를 포장
+2. **스트림 처리**: `coreStream`으로 모델의 delta 스트림 수신
+3. **함수 호출 파싱**: `parseFunctionCalls`로 자연어에서 Tool Call JSON 추출
+
+---
+
+## 핵심 모듈 상세 설명
 
 ### 1. getFunctionCallWrapPrompt(prompt, functions)
 
-**功能**：
-> 将原始用户 prompt 和可用 Tools 打包，引导 LLM 按指定 JSON 格式返回 Tool Call。
+**기능**:  
+> 사용자 입력 프롬프트와 사용 가능한 도구 목록을 JSON 형식으로 포장하여 LLM이 Tool Call을 정해진 형식으로 응답하도록 유도
 
-**主要逻辑**：
-- 列出全部函数（包括名称和参数格式）
-- 定义规范格式，比如：
+**주요 로직**:
+- 모든 함수의 이름과 파라미터 포맷 나열
+- 예시 포맷 정의:
 ```json
 { "tool_name": "xxx", "parameters": { "key": "value" } }
 ```
-- 插入原始用户输入，保持连贯自然
+- 사용자 입력을 자연스럽게 삽입
 
-**核心思想**：
-让不支持原生 Function Calling 的模型也能理解“可以调用工具”。
+**핵심 아이디어**:  
+Function Calling을 지원하지 않는 모델도 도구 호출이 가능하도록 유도
 
 ---
 
 ### 2. coreStream(config)
 
-**功能**：
-> 负责流式向 LLM 发送请求，同时流式接收 delta 数据并实时处理。
+**기능**:  
+> LLM에 요청을 스트리밍 방식으로 보내고, 응답 delta를 실시간으로 수신/처리
 
-**处理细节**：
-- 每次接收 delta：
-  - 检测是否包含 `content`
-  - 将每个字符段重新组合，保证符合 JSON 格式
-  - 封装成新的 reply 字符串，防止丢片或乱序
-- 重组处理：
-  - 遇到 Tool Call JSON 特征（如 `{ "tool_name"` 开头）
-  - 将可能被切断的文本段进行合并
-- 检测到完整 Tool Call JSON，立刻调用 `parseFunctionCalls`
+**처리 세부사항**:
+- delta 수신 시 마다:
+  - `content` 포함 여부 판단
+  - JSON 형식을 유지하도록 문자 단위 조립
+  - 새로운 reply 문자열로 포장하여 누락 방지
+- 조립 로직:
+  - `{ "tool_name"` 등의 특징으로 Tool Call JSON 여부 탐지
+  - 조각난 텍스트 병합
 
-**状态机**：
-流式数据处理过程采用状态机模型来逐步处理返回的 delta 数据。
+- Tool Call JSON이 완성되면 즉시 `parseFunctionCalls` 호출
 
-1. **接收 delta**：进入接收状态，分析是否含有 `content`。
-2. **抽取与拼接**：若 delta 数据不完整，暂时保存并与后续数据拼接。
-3. **判断工具调用**：检查 delta 是否符合工具调用的 JSON 格式，如果是，则进入工具调用解析状态。
-4. **工具调用解析**：调用 `parseFunctionCalls` 解析工具调用 JSON 格式，提取参数并进行处理。
-5. **完成调用**：返回解析后的结果，或继续处理剩余内容。
-
+**상태 머신 흐름**:
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收Delta
-    接收Delta --> 抽取拼接
-    抽取拼接 --> 判断工具调用
-    判断工具调用 --> 工具调用解析 : 是
-    判断工具调用 --> 继续累加 : 否
-    工具调用解析 --> 完成调用
-    继续累加 --> [*]
+    [*] --> 접수Delta
+    접수Delta --> 추출및조립
+    추출및조립 --> ToolCall판단
+    ToolCall판단 --> ToolCall파싱 : 예
+    ToolCall판단 --> 계속누적 : 아니오
+    ToolCall파싱 --> 호출완료
+    계속누적 --> [*]
 ```
 
 ---
 
 ### 3. parseFunctionCalls(text)
 
-**功能**：
-> 从自然语言输出中，提取符合格式的 Tool Call JSON，并解析成标准 JS Object。
+**기능**:  
+> 자연어 응답에서 Tool Call JSON을 추출하고 JavaScript 객체로 파싱
 
-**主要逻辑**：
-- 正则匹配 `{...}` 结构
-- 支持多 Tool Call 同时存在
-- 对异常 JSON（超出字符、缺引号等）进行容错修正
+**주요 로직**:
+- 정규표현식으로 `{...}` JSON 탐지
+- 다중 Tool Call 동시 존재 지원
+- 비정상 JSON(문자열 누락, 괄호 미닫힘 등)에 대한 오류 보정 지원
 
 ---
 
-## 总体流程图 (Mermaid)
+## 전체 흐름도 (Mermaid)
 
 ```mermaid
 flowchart TD
-    A[用户输入 prompt] --> B[getFunctionCallWrapPrompt]
-    B --> C[打包后的 prompt]
-    C --> D[coreStream 流式发送]
-    D --> E[LLM 返回 delta]
-    E --> F{delta 有内容吗}
-    F -- 是 --> G[抽取字符、重组]
-    G --> H{包含 Tool Call 吗}
-    H -- 是 --> I[parseFunctionCalls]
-    H -- 否 --> J{是否有可能组成 Tool Call}
-    J -- 是 --> K[继续累加内容]
-    J -- 否 --> L[发送累加内容并清空]
-    I --> M[返回 Tool Call result]
+    A[사용자 입력 프롬프트] --> B[getFunctionCallWrapPrompt]
+    B --> C[포장된 프롬프트]
+    C --> D[coreStream 스트리밍 전송]
+    D --> E[LLM의 delta 반환]
+    E --> F{delta에 내용 있음?}
+    F -- 예 --> G[문자 추출 및 조립]
+    G --> H{Tool Call 포함?}
+    H -- 예 --> I[parseFunctionCalls]
+    H -- 아니오 --> J{Tool Call 형식 가능성 있음?}
+    J -- 예 --> K[내용 누적]
+    J -- 아니오 --> L[누적 내용 출력 및 초기화]
+    I --> M[Tool Call 결과 반환]
     K --> G
     L --> G
 ```
+
 ---
 
-## 时序图 (Mermaid)
+## 시퀀스 다이어그램 (Mermaid)
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant Frontend
+    participant 사용자
+    participant 프론트엔드
     participant BaseProvider
     participant LLM
-    participant Parser
+    participant 파서
 
-    User->>Frontend: 提交 prompt
-    Frontend->>BaseProvider: getFunctionCallWrapPrompt(prompt, functions)
-    BaseProvider-->>Frontend: 返回打包后 prompt
+    사용자->>프론트엔드: 프롬프트 입력
+    프론트엔드->>BaseProvider: getFunctionCallWrapPrompt(prompt, functions)
+    BaseProvider-->>프론트엔드: 포장된 프롬프트 반환
 
-    Frontend->>LLM: 发送请求
-    LLM-->>Frontend: 流式返回 delta
+    프론트엔드->>LLM: 요청 전송
+    LLM-->>프론트엔드: delta 스트림 반환
 
-    loop 流式处理
-        Frontend->>Frontend: 抽取字符、重组
-        Frontend->>Frontend: 检测是否有 Tool Call JSON
-        alt 检测到 Tool Call
-            Frontend->>Parser: parseFunctionCalls(text)
-            Parser-->>Frontend: 返回函数调用结果
+    loop 스트림 처리
+        프론트엔드->>프론트엔드: 문자 추출 및 조립
+        프론트엔드->>프론트엔드: Tool Call JSON 여부 탐지
+        alt Tool Call 탐지됨
+            프론트엔드->>파서: parseFunctionCalls(text)
+            파서-->>프론트엔드: 함수 호출 결과 반환
         end
     end
 
-    Frontend->>User: 展示最终结果
+    프론트엔드->>사용자: 최종 결과 출력
 ```
 
 ---
 
-## 设计亮点
+## 설계의 주요 특징
 
-- **Prompt 智能封装**：适配各类模型，不依赖原生技术
-- **流式处理精细**：字符级重组与校验
-- **Tool Call 高容错解析**：支持不规则、复杂、多重并发 Tool Use
+- **프롬프트 포장 지능화**: Function Calling 미지원 모델도 도구 호출 유도 가능
+- **정교한 스트리밍 처리**: 문자 단위 조립 및 검사
+- **높은 내결함성**: 불완전하거나 중첩된 Tool Use JSON도 유연하게 파싱 가능
 
 ---
 
-## 后续可增强方向
+## 향후 개선 방향
 
-- 自适应 Prompt 调整，根据模型类型高效引导
-- 支持嵌套式 Tool Call（工具内部再调工具）
-- 多轮对话中的 Tool Use 继承与独立管理
+- 모델 특성에 따라 Prompt를 동적으로 최적화하는 기능
+- 중첩된 Tool Call 지원 (도구 내부에서 다른 도구 호출)
+- 멀티턴 대화에서 Tool Use 상태 상속 및 독립 관리

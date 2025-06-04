@@ -1,65 +1,66 @@
-# 事件系统设计文档
+# 이벤트 시스템 설계 문서
 
-## 问题背景
+## 문제 배경
 
-当前项目中的`provider-models-updated`事件存在混乱的情况，这个事件同时由两个不同的来源触发：
+현재 프로젝트에서 `provider-models-updated` 이벤트가 혼란스럽게 사용되고 있습니다. 이 이벤트는 서로 다른 두 소스에서 동시에 트리거됩니다:
 
-1. **BaseLLMProvider**: 在处理模型时触发（如`addCustomModel`, `removeCustomModel`等方法）
-2. **ConfigPresenter**: 在配置更改时触发（如`addCustomModel`, `removeCustomModel`等方法）
+1. **BaseLLMProvider**: 모델을 처리할 때 트리거됨 (예: `addCustomModel`, `removeCustomModel` 등의 메서드)
+2. **ConfigPresenter**: 설정 변경 시 트리거됨 (예: `addCustomModel`, `removeCustomModel` 등의 메서드)
 
-这种设计导致了多种问题：
-- 事件循环触发（导致死循环问题）
-- 事件语义不清晰（同一事件表示不同的业务含义）
-- 代码耦合度高且难以维护
+이러한 설계는 여러 문제를 유발합니다:
 
-## 事件分类与命名规范
+- 이벤트의 순환 트리거 (무한 루프 문제 발생)
+- 이벤트 의미가 불명확함 (동일 이벤트가 다른 비즈니스 의미를 가짐)
+- 코드 간 결합도가 높고 유지보수가 어려움
 
-将事件按功能领域分类，并采用统一的命名规范：
+## 이벤트 분류 및 명명 규칙
 
-1. **配置相关事件**：
-   - `config:provider-changed`：提供者配置变更
-   - `config:system-changed`：系统配置变更
-   - `config:model-list-changed`：配置中的模型列表变更
+기능 영역별로 이벤트를 분류하고, 통일된 명명 규칙을 적용합니다:
 
-2. **模型相关事件**：
-   全部去掉，模型状态和名称事件都有config来发起,和上层settings保持语义一致
+1. **설정 관련 이벤트**:
 
-3. **会话相关事件**：
+   - `config:provider-changed`：제공자 설정 변경
+   - `config:system-changed`：시스템 설정 변경
+   - `config:model-list-changed`：설정 내 모델 목록 변경
+2. **모델 관련 이벤트**:
+   모두 제거. 모델 상태 및 이름 관련 이벤트는 config에서만 발행하며, 상위 settings와 의미를 일치시킴
+3. **대화 관련 이벤트**:
+
    - `conversation:created`
    - `conversation:activated`
    - `conversation:cleared`
+4. **통신 관련 이벤트**:
 
-4. **通信相关事件**：
    - `stream:response`
    - `stream:end`
    - `stream:error`
+5. **앱 업데이트 관련 이벤트**:
 
-5. **应用更新相关事件**：
    - `update:status-changed`
    - `update:progress`
    - `update:error`
    - `update:will-restart`
+6. **동기화 관련 이벤트**:
 
-6. **同步相关事件**：
-   - `sync:backup-started`：备份开始
-   - `sync:backup-completed`：备份完成
-   - `sync:backup-error`：备份出错
-   - `sync:import-started`：导入开始
-   - `sync:import-completed`：导入完成
-   - `sync:import-error`：导入出错
+   - `sync:backup-started`：백업 시작
+   - `sync:backup-completed`：백업 완료
+   - `sync:backup-error`：백업 오류
+   - `sync:import-started`：가져오기 시작
+   - `sync:import-completed`：가져오기 완료
+   - `sync:import-error`：가져오기 오류
 
-## 责任分离
+## 책임 분리
 
-明确每个组件的事件触发责任：
+각 컴포넌트가 담당하는 이벤트 트리거 책임을 명확히 정의합니다:
 
-- **ConfigPresenter**：仅负责配置相关事件
-- **BaseLLMProvider**：仅负责模型操作,不发起事件
-- **ThreadPresenter**：仅负责会话相关事件
-- **UpgradePresenter**：仅负责应用更新相关事件
+- **ConfigPresenter**：설정 관련 이벤트만 담당
+- **BaseLLMProvider**：모델 조작만 담당, 이벤트는 트리거하지 않음
+- **ThreadPresenter**：대화 관련 이벤트만 담당
+- **UpgradePresenter**：앱 업데이트 관련 이벤트만 담당
 
-## 事件流时序图
+## 이벤트 흐름 시퀀스 다이어그램
 
-### 当前事件流
+### 현재 이벤트 흐름
 
 ```
 BaseLLMProvider                ConfigPresenter                  Presenter(Main)                  Settings(Renderer)
@@ -79,7 +80,7 @@ BaseLLMProvider                ConfigPresenter                  Presenter(Main) 
      |                              |                                 |                                |--- refreshAllModels()
 ```
 
-### 重构后的事件流
+### 리팩토링 후 이벤트 흐름
 
 ```
 ConfigPresenter                  Presenter(Main)                  Settings(Renderer)

@@ -1,24 +1,25 @@
-# ConfigPresenter 模块设计文档
 
-## 功能概述
+# ConfigPresenter 모듈 설계 문서
 
-ConfigPresenter 是 DeepChat 的核心配置管理模块，负责管理应用程序的各种配置项，包括：
+## 기능 개요
 
-1. 应用基础设置（语言、代理、同步等）
-2. LLM 提供商配置
-3. 模型管理（标准模型和自定义模型）
-4. MCP (Model Control Protocol) 服务器配置
-5. 数据迁移和版本兼容性处理
+ConfigPresenter는 DeepChat의 핵심 설정 관리 모듈로, 애플리케이션의 다양한 설정 항목을 관리합니다. 주요 기능은 다음과 같습니다:
 
-## 核心设计
+1. 애플리케이션 기본 설정 (언어, 프록시, 동기화 등)
+2. LLM 제공자 설정
+3. 모델 관리 (기본 모델 및 사용자 정의 모델)
+4. MCP (Model Control Protocol) 서버 설정
+5. 데이터 마이그레이션 및 버전 호환성 처리
 
-### 1. 存储架构
+## 핵심 설계
 
-ConfigPresenter 采用分层存储设计：
+### 1. 저장소 아키텍처
 
-- **主配置存储**：使用 ElectronStore 存储应用基础设置
-- **模型存储**：每个 LLM 提供商拥有独立的 ElectronStore 实例
-- **状态存储**：模型启用状态单独存储在主配置中
+ConfigPresenter는 계층형 저장소 설계를 채택하고 있습니다:
+
+- **주 설정 저장소**: ElectronStore를 사용하여 애플리케이션 기본 설정 저장
+- **모델 저장소**: 각 LLM 제공자는 독립적인 ElectronStore 인스턴스를 가짐
+- **상태 저장소**: 모델 활성화 상태는 주 설정에 별도로 저장
 
 ```mermaid
 classDiagram
@@ -39,21 +40,21 @@ classDiagram
     }
 ```
 
-### 2. 主要接口
+### 2. 주요 인터페이스
 
-#### 应用设置管理
+#### 애플리케이션 설정 관리
 
 - `getSetting<T>(key: string): T | undefined`
 - `setSetting<T>(key: string, value: T): void`
 
-#### 提供商管理
+#### 제공자 관리
 
 - `getProviders(): LLM_PROVIDER[]`
 - `setProviders(providers: LLM_PROVIDER[]): void`
 - `getProviderById(id: string): LLM_PROVIDER | undefined`
 - `setProviderById(id: string, provider: LLM_PROVIDER): void`
 
-#### 模型管理
+#### 모델 관리
 
 - `getProviderModels(providerId: string): MODEL_META[]`
 - `setProviderModels(providerId: string, models: MODEL_META[]): void`
@@ -62,33 +63,33 @@ classDiagram
 - `addCustomModel(providerId: string, model: MODEL_META): void`
 - `removeCustomModel(providerId: string, modelId: string): void`
 
-#### MCP 配置管理
+#### MCP 설정 관리
 
 - `getMcpServers(): Promise<Record<string, MCPServerConfig>>`
 - `setMcpServers(servers: Record<string, MCPServerConfig>): Promise<void>`
 - `getMcpEnabled(): Promise<boolean>`
 - `setMcpEnabled(enabled: boolean): Promise<void>`
 
-### 3. 事件系统
+### 3. 이벤트 시스템
 
-ConfigPresenter 通过 eventBus 发出以下配置变更事件：
+ConfigPresenter는 eventBus를 통해 다음과 같은 설정 변경 이벤트를 발생시킵니다:
 
-| 事件名称                                 | 触发时机            | 参数                         |
-| ---------------------------------------- | ------------------- | ---------------------------- |
-| CONFIG_EVENTS.SETTING_CHANGED            | 任何配置项变更时    | key, value                   |
-| CONFIG_EVENTS.PROVIDER_CHANGED           | 提供商列表变更时    | -                            |
-| CONFIG_EVENTS.MODEL_STATUS_CHANGED       | 模型启用状态变更时  | providerId, modelId, enabled |
-| CONFIG_EVENTS.MODEL_LIST_CHANGED         | 模型列表变更时      | providerId                   |
-| CONFIG_EVENTS.PROXY_MODE_CHANGED         | 代理模式变更时      | mode                         |
-| CONFIG_EVENTS.CUSTOM_PROXY_URL_CHANGED   | 自定义代理URL变更时 | url                          |
-| CONFIG_EVENTS.ARTIFACTS_EFFECT_CHANGED   | 动画效果设置变更时  | enabled                      |
-| CONFIG_EVENTS.SYNC_SETTINGS_CHANGED      | 同步设置变更时      | { enabled, folderPath }      |
-| CONFIG_EVENTS.CONTENT_PROTECTION_CHANGED | 投屏保护设置变更时  | enabled                      |
-| CONFIG_EVENTS.SEARCH_ENGINES_UPDATED     | 搜索引擎设置变更时  | engines                      |
+| 이벤트 이름                            | 발생 시점                | 파라미터                          |
+| ------------------------------------- | ----------------------- | --------------------------------- |
+| CONFIG_EVENTS.SETTING_CHANGED         | 설정 항목 변경 시        | key, value                        |
+| CONFIG_EVENTS.PROVIDER_CHANGED        | 제공자 목록 변경 시      | -                                 |
+| CONFIG_EVENTS.MODEL_STATUS_CHANGED    | 모델 활성 상태 변경 시   | providerId, modelId, enabled      |
+| CONFIG_EVENTS.MODEL_LIST_CHANGED      | 모델 목록 변경 시        | providerId                        |
+| CONFIG_EVENTS.PROXY_MODE_CHANGED      | 프록시 모드 변경 시      | mode                              |
+| CONFIG_EVENTS.CUSTOM_PROXY_URL_CHANGED| 사용자 프록시 URL 변경 시| url                               |
+| CONFIG_EVENTS.ARTIFACTS_EFFECT_CHANGED| 애니메이션 효과 변경 시  | enabled                           |
+| CONFIG_EVENTS.SYNC_SETTINGS_CHANGED   | 동기화 설정 변경 시      | { enabled, folderPath }           |
+| CONFIG_EVENTS.CONTENT_PROTECTION_CHANGED | 화면 보호 설정 변경 시 | enabled                           |
+| CONFIG_EVENTS.SEARCH_ENGINES_UPDATED  | 검색 엔진 설정 변경 시   | engines                           |
 
-### 4. 数据迁移机制
+### 4. 데이터 마이그레이션 메커니즘
 
-ConfigPresenter 实现了版本感知的数据迁移：
+ConfigPresenter는 버전을 인식하는 데이터 마이그레이션을 구현합니다:
 
 ```mermaid
 sequenceDiagram
@@ -96,53 +97,53 @@ sequenceDiagram
     participant ElectronStore
     participant FileSystem
 
-    ConfigPresenter->>ElectronStore: 检查版本号
-    alt 版本不一致
-        ConfigPresenter->>FileSystem: 迁移旧数据
-        ConfigPresenter->>ElectronStore: 更新版本号
+    ConfigPresenter->>ElectronStore: 버전 확인
+    alt 버전이 다를 경우
+        ConfigPresenter->>FileSystem: 이전 데이터 마이그레이션
+        ConfigPresenter->>ElectronStore: 버전 번호 업데이트
     end
 ```
 
-迁移逻辑包括：
+마이그레이션 로직은 다음을 포함합니다:
 
-1. 模型数据从主配置迁移到独立存储
-2. 模型状态从模型对象分离到独立存储
-3. 特定提供商的URL格式修正
+1. 모델 데이터를 주 설정에서 독립 저장소로 이동
+2. 모델 상태를 모델 객체에서 분리하여 독립 저장소로 이동
+3. 특정 제공자의 URL 포맷 수정
 
-## 使用示例
+## 사용 예시
 
-### 获取当前语言设置
+### 현재 언어 설정 가져오기
 
 ```typescript
 const language = configPresenter.getLanguage()
 ```
 
-### 添加自定义模型
+### 사용자 정의 모델 추가
 
 ```typescript
 configPresenter.addCustomModel('openai', {
   id: 'gpt-4-custom',
   name: 'GPT-4 Custom',
   maxTokens: 8192
-  // ...其他属性
+  // ...기타 속성
 })
 ```
 
-### 启用MCP功能
+### MCP 기능 활성화
 
 ```typescript
 await configPresenter.setMcpEnabled(true)
 ```
 
-## 最佳实践
+## 모범 사례
 
-1. **配置访问**：总是通过 getSetting/setSetting 方法访问配置，不要直接操作 store
-2. **事件监听**：对配置变更感兴趣的部分应监听相应事件，而不是轮询检查
-3. **模型管理**：自定义模型应通过专用方法管理，避免直接操作存储
-4. **版本兼容**：添加新配置项时考虑默认值和迁移逻辑
+1. **설정 접근**: 항상 getSetting/setSetting 메서드를 통해 설정을 접근하고 store를 직접 조작하지 말 것
+2. **이벤트 리스닝**: 설정 변경에 관심 있는 부분은 관련 이벤트를 수신하고 주기적으로 확인하지 말 것
+3. **모델 관리**: 사용자 정의 모델은 전용 메서드를 통해 관리하고 저장소를 직접 수정하지 말 것
+4. **버전 호환성**: 새 설정 항목을 추가할 경우 기본값과 마이그레이션 로직을 고려할 것
 
-## 扩展性设计
+## 확장성 설계
 
-1. **IAppSettings 接口**：使用索引签名允许任意配置键
-2. **McpConfHelper**：将MCP相关逻辑分离到辅助类
-3. **提供商标识**：通过 providerId 字符串而非枚举支持动态提供商
+1. **IAppSettings 인터페이스**: 인덱스 시그니처를 사용하여 다양한 설정 키를 허용
+2. **McpConfHelper**: MCP 관련 로직을 보조 클래스로 분리
+3. **제공자 식별자**: providerId 문자열을 사용하여 동적 제공자 지원 (enum 대신)

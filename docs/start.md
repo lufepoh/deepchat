@@ -1,21 +1,13 @@
-# DeepChat Documentation
+# DeepChat 문서
 
-This directory contains design documents and usage guides for DeepChat.
+이 카탈로그에는 DeepChat의 설계 문서와 사용 지침이 포함되어 있습니다.
 
-## User Documentation
+## 설계 문서
 
-- [User Guide](./user-guide.md) - How to install, configure, and use DeepChat.
+- [이벤트 시스템 설계](./event-system-design.md) - 응용 이벤트 시스템의 설계 및 구현
+- [데이터 동기화 기능](./data-sync-feature.md) - 데이터 동기화 기능 설계 및 구현
+- [LLM Provider 인터페이스 디자인](./llm-provider-interface.md) - LLM Provider 인터페이스 설계
 
-## Developer Documentation
+## 빌드 가이드
 
-- [Developer Guide](./developer-guide.md) - Information for developers contributing to or building with DeepChat.
-
-## Design Documents
-
-- [Event System Design](./event-system-design.md) - Design and implementation of the application event system
-- [Data Sync Feature](./data-sync-feature.md) - Design and implementation of the data sync feature
-- [LLM Provider Interface Design](./llm-provider-interface.md) - Design of the LLM Provider interface
-
-## Build Guides
-
-- [Linux Build Guide](./linux-build-guide.md) - Steps to build DeepChat on Linux systems
+- [리눅스 구축 가이드](./linux-build-guide.md) - 리눅스 시스템에서 DeepChat을 구축하려면

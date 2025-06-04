@@ -1,54 +1,56 @@
-# DeepChat User Guide
 
-Welcome to DeepChat! This guide will walk you through installing DeepChat, configuring its features, and using it to interact with various Large Language Models (LLMs).
+# DeepChat 사용자 가이드
 
-## 📑 Table of Contents
+DeepChat에 오신 것을 환영합니다! 이 가이드는 DeepChat 설치, 기능 설정 및 다양한 대형 언어 모델(LLM)과 상호작용하는 방법을 안내합니다.
 
-- [Installation and Setup](#installation-and-setup)
-- [Configuring LLM Providers](#configuring-llm-providers)
-  - [Cloud LLM Providers](#cloud-llm-providers)
-  - [Local Models (Ollama)](#local-models-ollama)
-- [Basic Chat Functionalities](#basic-chat-functionalities)
-  - [Creating New Conversations](#creating-new-conversations)
-  - [Sending Messages](#sending-messages)
-  - [Forking Conversations](#forking-conversations)
-  - [Retrying Messages](#retrying-messages)
-  - [Multi-Window and Multi-Tab](#multi-window-and-multi-tab)
-- [Advanced Chat Functionalities](#advanced-chat-functionalities)
-  - [Markdown Rendering](#markdown-rendering)
-  - [Multi-Modal Content](#multi-modal-content)
-  - [Artifacts Rendering](#artifacts-rendering)
-- [Using Search Enhancement](#using-search-enhancement)
-- [Using Tool Calling (MCP)](#using-tool-calling-mcp)
-- [Privacy and Security Features](#privacy-and-security-features)
-  - [Screen Projection Hiding](#screen-projection-hiding)
-  - [Network Proxies](#network-proxies)
-  - [Data Storage and Encryption](#data-storage-and-encryption)
-- [DeepLink Support](#deeplink-support)
+## 📑 목차
 
-## Installation and Setup
+- [설치 및 시작하기](#설치-및-시작하기)
+- [LLM 제공자 설정](#llm-제공자-설정)
+  - [클라우드 LLM 제공자](#클라우드-llm-제공자)
+  - [로컬 모델 (Ollama)](#로컬-모델-ollama)
+- [기본 채팅 기능](#기본-채팅-기능)
+  - [새 대화 생성](#새-대화-생성)
+  - [메시지 전송](#메시지-전송)
+  - [대화 분기](#대화-분기)
+  - [메시지 재시도](#메시지-재시도)
+  - [멀티 윈도우 및 탭](#멀티-윈도우-및-탭)
+- [고급 채팅 기능](#고급-채팅-기능)
+  - [Markdown 렌더링](#markdown-렌더링)
+  - [멀티모달 콘텐츠](#멀티모달-콘텐츠)
+  - [Artifacts 렌더링](#artifacts-렌더링)
+- [검색 기능 향상 사용하기](#검색-기능-향상-사용하기)
+- [도구 호출 (MCP) 사용하기](#도구-호출-mcp-사용하기)
+- [개인정보 보호 및 보안 기능](#개인정보-보호-및-보안-기능)
+  - [화면 공유 보호](#화면-공유-보호)
+  - [네트워크 프록시](#네트워크-프록시)
+  - [데이터 저장 및 암호화](#데이터-저장-및-암호화)
+- [DeepLink 지원](#deeplink-지원)
 
-To get started with DeepChat, download the latest version for your operating system from the [GitHub Releases page](https://github.com/ThinkInAIXYZ/deepchat/releases).
+## 설치 및 시작하기
 
--   **Windows**: Download the `.exe` installer.
--   **macOS**: Download the `.dmg` installation file.
--   **Linux**: Download the `.AppImage` or `.deb` installation file.
+[GitHub 릴리스 페이지](https://github.com/ThinkInAIXYZ/deepchat/releases)에서 운영 체제에 맞는 최신 버전을 다운로드하세요.
 
-After downloading, run the installer and follow the on-screen instructions to complete the installation.
+- **Windows**: `.exe` 설치 파일 다운로드
+- **macOS**: `.dmg` 설치 파일 다운로드
+- **Linux**: `.AppImage` 또는 `.deb` 설치 파일 다운로드
 
-## Configuring LLM Providers
+다운로드 후 설치 파일을 실행하고 안내에 따라 설치를 완료하세요.
 
-DeepChat supports a wide range of LLM providers, both cloud-based and local.
+## LLM 제공자 설정
 
-1.  Launch the DeepChat application.
-2.  Click the **Settings icon** (often a gear or cogwheel symbol).
-3.  Navigate to the **"Model Providers"** tab.
+DeepChat은 클라우드 기반 및 로컬 기반의 다양한 LLM 제공자를 지원합니다.
 
-### Cloud LLM Providers
+1. DeepChat 앱을 실행합니다.
+2. **설정 아이콘(기어 모양)**을 클릭합니다.
+3. **모델 제공자(Model Providers)** 탭으로 이동합니다.
 
-DeepChat supports various cloud LLMs, including:
+### 클라우드 LLM 제공자
+
+지원하는 클라우드 LLM:
+
 - DeepSeek
-- OpenAI (including Azure OpenAI)
+- OpenAI (Azure 포함)
 - Silicon Flow
 - Grok
 - Gemini
@@ -64,120 +66,112 @@ DeepChat supports various cloud LLMs, including:
 - Qiniu
 - Zhipu AI
 - Hunyuan (Tencent Cloud)
-- And any provider compatible with OpenAI, Gemini, or Anthropic API formats.
+- 기타 OpenAI, Gemini, Anthropic API 호환 제공자
 
-To configure a cloud provider:
-1.  Select the provider from the list.
-2.  Enter your API key and any other required credentials.
-3.  Save the configuration.
+설정 방법:
 
-### Local Models (Ollama)
+1. 목록에서 제공자를 선택합니다.
+2. API 키 및 필요 자격 정보를 입력합니다.
+3. 저장 버튼을 클릭합니다.
 
-DeepChat has integrated support for Ollama, allowing you to manage and use local models without command-line operations.
-1.  In the "Model Providers" tab, select Ollama.
-2.  DeepChat allows you to:
-    *   Download Ollama models directly within the application.
-    *   Manage your existing Ollama models (deploy, run, remove).
-3.  Once configured, you can select your local models when starting a new chat.
+### 로컬 모델 (Ollama)
 
-## Basic Chat Functionalities
+DeepChat은 Ollama를 통합 지원하여, 터미널 명령어 없이 로컬 모델을 사용할 수 있습니다.
 
-### Creating New Conversations
+1. **Model Providers** 탭에서 Ollama 선택
+2. DeepChat에서는 다음 기능을 제공합니다:
+   * Ollama 모델 다운로드 및 설치
+   * 기존 모델 실행, 제거, 배포
+3. 설정 후 새 대화 시 로컬 모델을 선택할 수 있습니다.
 
--   Click the **"+" button** (usually prominently displayed) to start a new chat session.
--   You will typically be prompted to select the LLM you wish to use for this conversation from your configured providers.
+## 기본 채팅 기능
 
-### Sending Messages
+### 새 대화 생성
 
--   Type your message into the input field at the bottom of the chat window.
--   Press Enter or click the send button to send your message to the LLM.
+- **"+" 버튼**을 클릭해 새 대화 시작
+- 사용할 LLM 제공자를 선택하라는 메시지가 표시됩니다.
 
-### Forking Conversations
+### 메시지 전송
 
--   If you want to explore a different line of thought or ask a follow-up question without altering the current conversation flow, you can fork the conversation.
--   Look for a "Fork" option on a specific message or for the entire conversation. This will create a new, separate chat session that branches off from the point you selected.
+- 하단 입력창에 메시지를 입력하고 Enter 또는 전송 버튼 클릭
 
-### Retrying Messages
+### 대화 분기
 
--   If you're not satisfied with a response or if an error occurred, you can retry sending your message or ask the LLM to generate a new response.
--   This feature often allows you to get multiple variations of an answer.
+- 메시지를 기준으로 대화를 분기해 다른 흐름을 탐색할 수 있습니다.
+- 특정 메시지 또는 전체 대화에서 "Fork" 기능 선택
 
-### Multi-Window and Multi-Tab
+### 메시지 재시도
 
-DeepChat supports a multi-window and multi-tab architecture, similar to a web browser. This allows for:
--   Parallel multi-session operations.
--   Non-blocking experience, improving efficiency when working with multiple models or conversations simultaneously.
+- 응답에 만족하지 않거나 오류 발생 시 메시지를 재전송하거나 응답 재생성 가능
 
-## Advanced Chat Functionalities
+### 멀티 윈도우 및 탭
 
-### Markdown Rendering
+- 웹 브라우저처럼 여러 채팅 탭과 윈도우를 동시에 열어 사용 가능
+- 모델/대화별 병렬 작업 효율성 향상
 
--   DeepChat provides complete Markdown rendering for chat messages.
--   This includes support for headings, lists, bold/italic text, links, and code blocks.
--   Code blocks are rendered using CodeMirror for syntax highlighting and clarity.
+## 고급 채팅 기능
 
-### Multi-Modal Content
+### Markdown 렌더링
 
--   DeepChat supports displaying multi-modal content within chats.
--   This means you can view images generated by models (e.g., using GPT-4o, Gemini, Grok text-to-image capabilities).
--   Support for Mermaid diagrams allows for rendering complex diagrams directly in the chat.
+- 제목, 리스트, 굵은/기울임 글씨, 링크, 코드 블록 지원
+- CodeMirror를 활용한 코드 하이라이팅 제공
 
-### Artifacts Rendering
+### 멀티모달 콘텐츠
 
--   DeepChat supports Artifacts rendering, which provides diverse ways to present results from LLMs, especially when using Tool Calling (MCP).
--   This can significantly save token consumption and present complex data more effectively than plain text.
+- 이미지, 다이어그램 등의 시각 콘텐츠 출력 가능
+- GPT-4o, Gemini 등 멀티모달 모델 이미지 출력 지원
+- Mermaid 다이어그램 렌더링 기능 포함
 
-## Using Search Enhancement
+### Artifacts 렌더링
 
-DeepChat enhances LLM responses by integrating with search engines. This provides more accurate, timely, and verifiable information.
+- MCP 기반 도구 호출 결과를 다양한 형태로 시각화
+- 토큰 소모 절감, 복잡한 데이터 시각적 표현 가능
 
--   **Automatic Search (MCP Mode)**: When using MCP-enabled models, the LLM can intelligently decide when to perform a web search to answer your query. It can use built-in integrations with BoSearch or Brave Search.
--   **Simulated Web Browsing**: DeepChat can simulate user web browsing for mainstream search engines like Google, Bing, Baidu, and Sogou Official Accounts. This allows the LLM to "read" search engine results like a human.
--   **Custom Search Engines**: You can configure DeepChat to use virtually any search engine, including internal corporate networks or specialized vertical domain search engines, by setting up a search assistant model.
--   Search results and other external information sources are often highlighted within the LLM's response for clarity.
+## 검색 기능 향상 사용하기
 
-## Using Tool Calling (MCP)
+- **자동 검색 (MCP 모드)**: BoSearch 또는 Brave Search 통합을 통한 자동 웹 검색
+- **가상 웹 브라우징**: Google, Bing, Baidu, Sogou 등의 검색결과를 시뮬레이션으로 읽음
+- **사용자 지정 검색 엔진**: 사내 검색엔진 등 사용자 정의 가능
 
-DeepChat features excellent Model Controller Platform (MCP) support, allowing LLMs to use tools and access external resources.
+검색 결과는 채팅 응답 내에 강조 표시되어 명확히 제공됩니다.
 
--   **Configuration**: MCP services can be configured through a user-friendly interface. DeepLink support allows for one-click installation of MCP services.
--   **Capabilities**: MCP enables:
-    *   **Code Execution**: Run code snippets in a built-in Node.js environment.
-    *   **Web Information Retrieval**: Fetch content from web pages.
-    *   **File Operations**: Interact with local files.
-    *   **Custom Tools**: Integrate other custom or third-party tools.
--   **Display and Debugging**:
-    *   Tool calls are displayed clearly and aesthetically within the chat.
-    *   A detailed tool call debugging window shows parameters and return data, with automatic formatting.
--   **Built-in Services**: Many common use cases are supported out-of-the-box with built-in utilities, requiring no secondary installation. Visual model capabilities can also be converted into universally usable functions via MCP.
+## 도구 호출 (MCP) 사용하기
 
-## Privacy and Security Features
+MCP(Model Controller Platform)를 통해 외부 도구와 자원에 접근 가능
 
-DeepChat prioritizes user privacy and data security.
+- **설정**: 시각적 UI를 통해 설정 가능, DeepLink로 원클릭 설치
+- **지원 기능**:
+  * 코드 실행 (내장 Node.js)
+  * 웹 정보 크롤링
+  * 로컬 파일 접근
+  * 커스텀 도구 통합
+- **표시 및 디버깅**:
+  * 도구 호출 내역을 채팅창에 시각적으로 표시
+  * 디버깅 창에서 인자, 반환값 확인 가능
+- **내장 유틸리티**: 별도 설치 없이 자주 쓰이는 도구 내장
 
-### Screen Projection Hiding
+## 개인정보 보호 및 보안 기능
 
--   To prevent sensitive information from being accidentally displayed during screen sharing or projections, DeepChat offers a screen projection hiding feature. This typically obscures the chat content when active.
+### 화면 공유 보호
 
-### Network Proxies
+- 화면 공유 시 민감한 정보가 가려지도록 보호 기능 탑재
 
--   You can configure DeepChat to use network proxies, adding an extra layer of privacy and potentially bypassing network restrictions.
+### 네트워크 프록시
 
-### Data Storage and Encryption
+- 프록시 설정을 통해 개인정보 보호 및 우회 접속 가능
 
--   Chat data and configuration data have reserved encryption interfaces.
--   DeepChat focuses on local data storage where possible to reduce the risk of information leakage.
+### 데이터 저장 및 암호화
 
-## DeepLink Support
+- 채팅 및 설정 데이터 암호화 가능
+- 기본적으로 로컬 저장을 선호하여 정보 유출 위험을 최소화
 
-DeepChat utilizes rich DeepLink support, which allows:
--   **Initiating Conversations**: Start new chat sessions or interact with specific parts of the application via external links. This enables seamless integration with other applications or workflows.
--   **One-Click MCP Service Installation**: Simplify the setup of MCP services by installing them through a single click on a DeepLink.
+## DeepLink 지원
+
+DeepChat은 풍부한 DeepLink 기능을 지원합니다.
+
+- **외부 링크로 대화 시작**: 외부 앱에서 특정 대화를 열거나 기능 실행
+- **MCP 서비스 원클릭 설치**: 링크 클릭만으로 도구 설치 가능
 
 ---
 
-This user guide should help you get the most out of DeepChat. For more detailed information on specific features or for troubleshooting, please refer to the project's [GitHub repository](https://github.com/ThinkInAIXYZ/deepchat) or the community forums.The `README.md` provided a lot of useful information for creating the user guide. I've structured the guide as requested, covering installation, LLM configuration (cloud and local), basic and advanced chat functionalities, search enhancement, tool calling (MCP), and privacy/security features. I also included a section on DeepLink support as it was highlighted in the README.
-
-I've used the information from `README.md` for download links, feature descriptions, and supported LLM providers. The content is generic where specific UI elements are unknown, but provides a comprehensive overview based on the project's description.
-
-Now I will create the `docs/user-guide.md` file with the content I've prepared.
+이 가이드는 DeepChat을 최대한 활용할 수 있도록 도와줍니다. 자세한 기능이나 문제 해결에 대해서는 [GitHub 저장소](https://github.com/ThinkInAIXYZ/deepchat)나 커뮤니티 포럼을 참고하세요.

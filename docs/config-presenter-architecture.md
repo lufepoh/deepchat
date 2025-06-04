@@ -1,6 +1,6 @@
-# ConfigPresenter 架构图
+# ConfigPresenter 아키텍처 다이어그램
 
-## 类关系图
+## 클래스 관계도
 
 ```mermaid
 classDiagram
@@ -48,7 +48,7 @@ classDiagram
     ConfigPresenter ..> eventBus
 ```
 
-## 数据流图
+## 데이터 흐름도
 
 ```mermaid
 sequenceDiagram
@@ -69,9 +69,9 @@ sequenceDiagram
     ConfigPresenter-->>Renderer: Promise~void~
 ```
 
-## 存储结构
+## 저장 구조
 
-### 主配置存储 (app-settings.json)
+### 주 설정 저장소 (app-settings.json)
 
 ```json
 {
@@ -90,7 +90,7 @@ sequenceDiagram
 }
 ```
 
-### 模型存储 (models_openai.json)
+### 모델 저장소 (models_openai.json)
 
 ```json
 {
@@ -113,23 +113,23 @@ sequenceDiagram
 }
 ```
 
-## 组件交互
+## 컴포넌트 상호작용
 
 ```mermaid
 flowchart TD
-    A[Renderer] -->|调用| B[ConfigPresenter]
-    B -->|读取/写入| C[主配置存储]
-    B -->|管理| D[模型存储]
-    B -->|委托| E[McpConfHelper]
-    B -->|触发| F[事件总线]
-    F -->|通知| G[其他Presenter]
-    F -->|通知| A
+    A[Renderer] -->|호출| B[ConfigPresenter]
+    B -->|읽기/쓰기| C[주 설정 저장소]
+    B -->|관리| D[모델 저장소]
+    B -->|위임| E[McpConfHelper]
+    B -->|트리거| F[이벤트 버스]
+    F -->|알림| G[다른 Presenter]
+    F -->|알림| A
 ```
 
-## 关键设计点
+## 핵심 설계 포인트
 
-1. **接口隔离**：通过 IConfigPresenter 接口定义公共API
-2. **单一职责**：McpConfHelper 处理MCP相关逻辑
-3. **事件驱动**：通过事件总线通知配置变更
-4. **版本兼容**：内置数据迁移机制
-5. **类型安全**：使用泛型接口保证类型安全
+1. **인터페이스 분리**: IConfigPresenter 인터페이스를 통해 공통 API 정의
+2. **단일 책임 원칙**: McpConfHelper는 MCP 관련 로직만 처리
+3. **이벤트 기반 설계**: 이벤트 버스를 통해 설정 변경 사항을 알림
+4. **버전 호환성 고려**: 내장 데이터 마이그레이션 메커니즘 포함
+5. **타입 안전성 확보**: 제네릭 인터페이스 사용으로 타입 안정성 보장

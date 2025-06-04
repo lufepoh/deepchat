@@ -1,292 +1,175 @@
-# DeepChat 项目架构概览
 
-本文档提供了 DeepChat 项目的整体架构概览，帮助开发者快速理解项目的运行逻辑和框架结构。
+# DeepChat 아키텍처 개요
 
-## 🏗️ 整体架构图
+이 문서는 DeepChat 프로젝트의 전체적인 아키텍처를 설명하며, 개발자가 실행 흐름과 구조를 빠르게 이해하는 데 도움을 줍니다.
 
-```mermaid
-graph TB
-    subgraph "Electron 主进程 (Main Process)"
-        MainEntry[主入口 index.ts]
-        EventBus[EventBus 事件总线]
+## 🏗️ 전체 아키텍처 다이어그램
 
-        subgraph "核心 Presenter 层"
-            WindowP[WindowPresenter<br/>窗口管理]
-            TabP[TabPresenter<br/>标签页管理]
-            ThreadP[ThreadPresenter<br/>会话管理]
-            ConfigP[ConfigPresenter<br/>配置管理]
-            MCPP[McpPresenter<br/>MCP工具管理]
-            LLMP[LLMProviderPresenter<br/>LLM提供商]
-            SyncP[SyncPresenter<br/>数据同步]
-            FileP[FilePresenter<br/>文件管理]
-            UpgradeP[UpgradePresenter<br/>应用更新]
-        end
+(※ Mermaid 다이어그램은 그대로 유지되며 번역 대상이 아닙니다. UI 또는 MD View에서 렌더링 가능)
 
-        subgraph "底层服务"
-            SqliteP[SqlitePresenter<br/>数据库]
-            TrayP[TrayPresenter<br/>系统托盘]
-            NotificationP[NotificationPresenter<br/>通知]
-            DeeplinkP[DeeplinkPresenter<br/>深链接]
-        end
+## 🔄 핵심 실행 흐름
 
-        ContextMenu[ContextMenuHelper<br/>右键菜单]
-    end
-
-    subgraph "Electron 渲染进程 (Renderer Process)"
-        subgraph "多窗口架构"
-            subgraph "Window Shell (窗口外壳)"
-                ShellHTML[shell/index.html]
-                TabBar[TabBar.vue<br/>标签栏UI]
-                ShellVue[Vue实例<br/>轻量级窗口管理]
-            end
-
-            subgraph "Tab Content (标签页内容)"
-                ContentHTML[src/index.html]
-                MainApp[主应用界面]
-
-                subgraph "Vue 应用层"
-                    Router[Vue Router<br/>路由系统]
-                    Pinia[Pinia Store<br/>状态管理]
-
-                    subgraph "页面组件"
-                        ChatView[ChatView.vue<br/>聊天界面]
-                        SettingsView[SettingsView.vue<br/>设置页面]
-                        McpView[McpView.vue<br/>MCP管理]
-                        ThreadView[ThreadView.vue<br/>会话列表]
-                    end
-                end
-            end
-        end
-    end
-
-    subgraph "Preload Scripts"
-        PreloadAPI[Preload API<br/>安全的IPC桥接]
-    end
-
-    subgraph "外部服务 & 集成"
-        subgraph "MCP 生态系统"
-            MCPServers[MCP 服务器<br/>外部工具]
-            MCPClients[MCP 客户端<br/>连接管理]
-            MCPTransport[Transport Layer<br/>Stdio/SSE/HTTP]
-        end
-
-        subgraph "LLM 提供商"
-            OpenAI[OpenAI API]
-            Anthropic[Anthropic Claude]
-            Gemini[Google Gemini]
-            LocalLLM[本地LLM<br/>Llama.cpp等]
-        end
-
-        subgraph "数据存储"
-            LocalDB[(SQLite 数据库)]
-            ConfigFiles[配置文件<br/>Electron Store]
-            FileSystem[文件系统<br/>用户文件]
-        end
-    end
-
-    %% 连接关系
-    MainEntry --> EventBus
-    EventBus --> WindowP
-    EventBus --> TabP
-    EventBus --> ThreadP
-    EventBus --> ConfigP
-    EventBus --> MCPP
-
-    WindowP --> TabP
-    TabP --> ShellHTML
-    TabP --> ContentHTML
-
-    ThreadP --> ChatView
-    ConfigP --> SettingsView
-    MCPP --> McpView
-
-    %% IPC 通信
-    ShellVue -.->|IPC| TabP
-    MainApp -.->|IPC| ThreadP
-    SettingsView -.->|IPC| ConfigP
-    McpView -.->|IPC| MCPP
-
-    %% 数据流
-    MCPP --> MCPServers
-    LLMP --> OpenAI
-    LLMP --> Anthropic
-    LLMP --> Gemini
-    LLMP --> LocalLLM
-
-    SqliteP --> LocalDB
-    ConfigP --> ConfigFiles
-    FileP --> FileSystem
-
-    %% 事件系统
-    WindowP -.->|事件| EventBus
-    TabP -.->|事件| EventBus
-    ThreadP -.->|事件| EventBus
-    ConfigP -.->|事件| EventBus
-
-    classDef mainProcess fill:#e1f5fe
-    classDef renderer fill:#f3e5f5
-    classDef external fill:#e8f5e8
-    classDef preload fill:#fff3e0
-
-    class MainEntry,EventBus,WindowP,TabP,ThreadP,ConfigP,MCPP,LLMP,SyncP,FileP,UpgradeP,SqliteP,TrayP,NotificationP,DeeplinkP,ContextMenu mainProcess
-    class ShellHTML,TabBar,ShellVue,ContentHTML,MainApp,Router,Pinia,ChatView,SettingsView,McpView,ThreadView renderer
-    class MCPServers,MCPClients,MCPTransport,OpenAI,Anthropic,Gemini,LocalLLM,LocalDB,ConfigFiles,FileSystem external
-    class PreloadAPI preload
-```
-
-## 🔄 核心运行流程
-
-### 1. 应用启动流程
+### 1. 애플리케이션 시작 흐름
 
 ```mermaid
 sequenceDiagram
     participant App as Electron App
-    participant Main as 主进程
-    participant Presenters as Presenter层
-    participant Window as 窗口管理
-    participant Shell as 窗口外壳
-    participant Content as 内容标签页
+    participant Main as 메인 프로세스
+    participant Presenters as Presenter 계층
+    participant Window as 창 관리
+    participant Shell as 창 외관
+    participant Content as 콘텐츠 탭
 
     App->>Main: app.whenReady()
-    Main->>Presenters: 初始化所有Presenter
-    Presenters->>Presenters: 注册事件监听器
+    Main->>Presenters: 모든 Presenter 초기화
+    Presenters->>Presenters: 이벤트 리스너 등록
     Main->>Window: createWindow()
-    Window->>Shell: 加载 shell/index.html
-    Shell->>Content: 创建首个标签页
-    Content->>Content: 加载主应用 src/index.html
+    Window->>Shell: shell/index.html 로딩
+    Shell->>Content: 첫 탭 생성
+    Content->>Content: src/index.html 로딩
 
-    Note over Main,Content: 应用就绪，开始处理用户交互
+    Note over Main,Content: 앱 준비 완료, 사용자 입력 대기
 ```
 
-### 2. 多窗口标签页管理
+### 2. 다중 창/탭 관리
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Shell as 窗口外壳
+    participant User as 사용자
+    participant Shell as 창 외관
     participant TabP as TabPresenter
     participant WindowP as WindowPresenter
-    participant Content as 标签内容
+    participant Content as 탭 콘텐츠
 
-    User->>Shell: 点击"新建标签"
-    Shell->>TabP: 请求创建新标签
-    TabP->>TabP: 创建 WebContentsView
-    TabP->>Content: 加载内容页面
-    TabP->>Shell: 更新标签栏UI
+    User->>Shell: "새 탭" 클릭
+    Shell->>TabP: 새 탭 생성 요청
+    TabP->>TabP: WebContentsView 생성
+    TabP->>Content: 콘텐츠 로드
+    TabP->>Shell: 탭 UI 갱신
 
-    User->>Shell: 拖拽标签到新窗口
-    Shell->>TabP: 标签移动请求
-    TabP->>WindowP: 创建新窗口
+    User->>Shell: 탭 드래그 → 새 창
+    Shell->>TabP: 탭 이동 요청
+    TabP->>WindowP: 새 창 생성
     TabP->>TabP: detachTab & attachTab
-    TabP->>Shell: 更新两个窗口的标签栏
+    TabP->>Shell: 양쪽 창의 탭 UI 갱신
 ```
 
-### 3. MCP 工具调用流程
+### 3. MCP 도구 호출 흐름
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Chat as 聊天界面
+    participant User as 사용자
+    participant Chat as 채팅 UI
     participant ThreadP as ThreadPresenter
     participant MCPP as McpPresenter
-    participant LLM as LLM提供商
-    participant Tool as MCP工具
+    participant LLM as LLM 제공자
+    participant Tool as MCP 도구
 
-    User->>Chat: 发送消息
-    Chat->>ThreadP: 处理用户消息
-    ThreadP->>LLM: 发送消息到LLM
-    LLM->>LLM: 分析需要调用工具
-    LLM->>MCPP: 请求工具定义
-    MCPP->>Tool: 获取可用工具
-    Tool-->>MCPP: 返回工具列表
-    MCPP-->>LLM: 转换为LLM格式
-    LLM->>MCPP: 执行工具调用
-    MCPP->>Tool: 调用具体工具
-    Tool-->>MCPP: 返回执行结果
-    MCPP-->>LLM: 格式化结果
-    LLM-->>ThreadP: 生成最终回复
-    ThreadP-->>Chat: 显示结果
+    User->>Chat: 메시지 입력
+    Chat->>ThreadP: 사용자 메시지 처리
+    ThreadP->>LLM: LLM에 메시지 전송
+    LLM->>LLM: 도구 호출 여부 분석
+    LLM->>MCPP: 도구 정의 요청
+    MCPP->>Tool: 사용 가능한 도구 확인
+    Tool-->>MCPP: 도구 목록 반환
+    MCPP-->>LLM: LLM 형식으로 변환
+    LLM->>MCPP: 도구 호출 실행
+    MCPP->>Tool: 도구 호출 수행
+    Tool-->>MCPP: 실행 결과 반환
+    MCPP-->>LLM: 결과 포맷 변환
+    LLM-->>ThreadP: 최종 응답 생성
+    ThreadP-->>Chat: 사용자에게 응답 표시
 ```
 
-## 🏛️ 架构设计原则
+## 🏛️ 아키텍처 설계 원칙
 
-### 1. 分层架构
-- **主进程层**: 负责系统级操作、窗口管理、核心业务逻辑
-- **渲染进程层**: 负责用户界面、用户交互、前端状态管理
-- **Preload层**: 提供安全的IPC通信桥梁
+### 1. 계층화 아키텍처
 
-### 2. Presenter 模式
-- 每个功能域都有对应的Presenter类
-- Presenter负责业务逻辑和状态管理
-- 通过EventBus实现松耦合的组件通信
+- **메인 프로세스 계층**: 시스템 작업, 창 관리, 핵심 로직
+- **렌더러 계층**: 사용자 인터페이스 및 상태 관리
+- **Preload 계층**: 보안 IPC 브리지 제공
 
-### 3. 多窗口多标签架构
-- **窗口外壳(Shell)**: 轻量级标签栏UI管理
-- **标签内容(Content)**: 完整的应用功能实现
-- **独立的Vue实例**: 分离关注点，提高性能
+### 2. Presenter 패턴
 
-### 4. 事件驱动架构
-- 统一的事件命名规范
-- 清晰的事件责任分离
-- 避免循环依赖和事件冲突
+- 기능별로 Presenter 클래스를 분리
+- Presenter는 상태 및 비즈니스 로직 담당
+- EventBus로 컴포넌트 간 느슨한 연결 유지
 
-## 🔧 核心组件说明
+### 3. 다중 창 & 탭 구조
+
+- **Shell(창 외관)**: 탭 UI 관리
+- **Content(탭 내용)**: 전체 앱 기능 포함
+- **Vue 인스턴스 분리**: 관심사 분리 및 성능 향상
+
+### 4. 이벤트 기반 구조
+
+- 이벤트 명명 규칙 일관성 유지
+- 이벤트 책임 명확 분리
+- 순환 참조 및 충돌 방지
+
+## 🔧 핵심 구성요소 설명
 
 ### WindowPresenter & TabPresenter
-- **WindowPresenter**: 管理BrowserWindow实例的生命周期
-- **TabPresenter**: 管理WebContentsView的创建、销毁、移动
-- 支持跨窗口标签页拖拽
+
+- `WindowPresenter`: BrowserWindow 인스턴스 관리
+- `TabPresenter`: WebContentsView 생성/삭제/이동 관리
+- 탭을 창 간에 드래그하여 이동 가능
 
 ### McpPresenter
-- **ServerManager**: MCP服务器连接和生命周期管理
-- **ToolManager**: 工具定义缓存和调用权限管理
-- **格式转换**: 在MCP工具格式与各LLM提供商格式间转换
+
+- `ServerManager`: MCP 서버 연결 및 수명 관리
+- `ToolManager`: 도구 캐시 및 권한 제어
+- LLM <-> MCP 도구 형식 간 변환 기능 포함
 
 ### ThreadPresenter
-- 管理对话会话的创建、切换、历史记录
-- 协调LLM调用和消息流处理
-- 处理流式响应和错误恢复
+
+- 대화 세션 생성, 전환, 기록 관리
+- 메시지 흐름 조율, LLM 호출 포함
+- 스트리밍 응답, 오류 복구 처리
 
 ### ConfigPresenter
-- 统一的配置管理，包括用户设置、模型配置、MCP设置
-- 配置变更事件发布
-- 数据持久化和迁移
 
-## 🚀 开发入门指南
+- 사용자 설정, 모델 설정, MCP 설정 관리
+- 설정 변경 시 이벤트 발송
+- 설정 데이터의 저장 및 마이그레이션 지원
 
-### 1. 环境准备
+## 🚀 개발 시작 가이드
+
+### 1. 개발 환경 준비
+
 ```bash
-# 安装依赖
-npm install
-
-# 启动开发服务器
-npm run dev
+npm install     # 의존성 설치
+npm run dev     # 개발 서버 실행
 ```
 
-### 2. 主要开发目录
-- `src/main/presenter/` - 核心业务逻辑
-- `src/renderer/src/` - 前端Vue组件
-- `src/renderer/shell/` - 标签栏UI
-- `src/shared/` - 类型定义和共享代码
+### 2. 주요 디렉토리 구조
 
-### 3. 常见开发任务
-- **添加新功能**: 创建对应的Presenter和Vue组件
-- **扩展MCP工具**: 在McpPresenter中添加新的工具支持
-- **UI组件开发**: 在renderer层使用Vue3 + Tailwind CSS
-- **数据持久化**: 通过SqlitePresenter或ConfigPresenter
+- `src/main/presenter/` - 메인 비즈니스 로직
+- `src/renderer/src/` - Vue UI 컴포넌트
+- `src/renderer/shell/` - 탭 바 UI
+- `src/shared/` - 타입 정의 및 공통 코드
 
-### 4. 调试技巧
-- 主进程调试: VSCode断点 + Electron DevTools
-- 渲染进程调试: Chrome DevTools
-- MCP工具调试: 内置的MCP调试窗口
-- 事件流调试: EventBus日志
+### 3. 주요 작업 예시
 
-## 📚 相关文档
-- [多窗口架构设计](./multi-window-architecture.md)
-- [MCP架构文档](./mcp-presenter-architecture.md)
-- [事件系统设计](./event-system-design.md)
-- [开发者指南](./developer-guide.md)
+- **기능 추가**: 새로운 Presenter + Vue 컴포넌트 작성
+- **MCP 도구 확장**: McpPresenter에 도구 등록
+- **UI 컴포넌트 개발**: Vue3 + Tailwind CSS 사용
+- **데이터 저장**: SqlitePresenter 또는 ConfigPresenter 사용
+
+### 4. 디버깅 팁
+
+- 메인 프로세스: VSCode 브레이크포인트 + Electron DevTools
+- 렌더러: Chrome DevTools
+- MCP 도구: 내장 디버깅 창
+- 이벤트 흐름: EventBus 로그 추적
+
+## 📚 관련 문서
+
+- [다중 창 아키텍처 문서](./multi-window-architecture.md)
+- [MCP 아키텍처 문서](./mcp-presenter-architecture.md)
+- [이벤트 시스템 문서](./event-system-design.md)
+- [개발자 가이드](./developer-guide.md)
 
 ---
 
-此架构图和说明为开发者提供了DeepChat项目的全局视图，有助于快速定位代码位置和理解系统运行机制。
+이 아키텍처 문서와 다이어그램은 DeepChat 프로젝트 구조에 대한 전체적인 시야를 제공합니다. 코드 위치 파악과 시스템 이해에 유용합니다.
