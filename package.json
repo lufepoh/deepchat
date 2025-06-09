@@ -28,7 +28,7 @@
     "build:linux:x64": "npm run build && electron-builder --linux --x64",
     "build:linux:arm64": "npm run build && electron-builder --linux --arm64",
     "afterSign": "scripts/notarize.js",
-    "installRuntime": "tiny-runtime-injector -d runtime/node -n v22.15.0 --no-docs --no-dev --no-sourcemaps",
+    "installRuntime": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression; tiny-runtime-injector -d runtime/node -n v22.15.0 --no-docs --no-dev --no-sourcemaps\"",
     "installRuntime:win:x64": "tiny-runtime-injector -d runtime/node -n v22.15.0 -a x64 -p win32 --no-docs --no-dev --no-sourcemaps",
     "installRuntime:win:arm64": "tiny-runtime-injector -d runtime/node -n v22.15.0 -a arm64 -p win32 --no-docs --no-dev --no-sourcemaps",
     "installRuntime:mac:arm64": "tiny-runtime-injector -d runtime/node -n v22.15.0 -a arm64 -p darwin --no-docs --no-dev --no-sourcemaps",
