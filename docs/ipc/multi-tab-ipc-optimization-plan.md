@@ -1,69 +1,60 @@
-# 多Tab IPC通信优化实施方案
 
-## 方案概述
+## 계획 개요
 
-本方案采用**渐进式优化**策略，确保向后兼容的同时逐步解决多tab环境下的IPC通信问题。
+이 계획은 **점진적인 최적화** 전략을 사용하여 기존 코드와의 후방호환성을 유지하면서 멀티 탭 환경에서 발생하는 IPC 통신 문제를 해결합니다.
 
-## 实施阶段
+## 실행 단계
 
-### 阶段一: 增强型Tab上下文识别 (短期 - 1-2周)
+### 단계 1: 강화된 탭 컨텍스트 인식 (짧은 기간 – 1~2주)
 
-#### 目标
+#### 목표
 
-- 在现有架构基础上添加tab上下文识别
-- 实现精确的tab级事件路由
-- 保持完全向后兼容
+• 기존 아키텍처를 바탕으로 탭 컨텍스트 인식을 추가하고, 정밀한 탭 수준 이벤트 라우팅을 가능하게 하며 후방호환성을 유지합니다.
 
-#### 具体实施
+#### 구체적 실행
 
-##### 1. 扩展 `presenter:call` 协议
+1. presenter:call 프로토콜 확장
 
 ```typescript
-// 新的调用协议结构
+// 새 호출 프로토콜 구조
 interface PresenterCallRequest {
-  tabId?: number // 调用来源tab ID
-  windowId?: number // 调用来源窗口 ID
-  name: string // presenter名称
-  method: string // 方法名
-  payloads: unknown[] // 参数
+  tabId?: number // 호출 원본 탭 ID
+  windowId?: number // 호출 원본 창의 ID
+  name: string // presenter 이름
+  method: string // 메서드 이름
+  payloads: unknown[] // 인자 배열
 }
 ```
 
-##### 2. 改进 `usePresenter.ts`
+2. usePresenter.ts 수정
+   • 렌더링 프로세스에서 자동으로 현재 탭 컨텍스트 정보를 추가합니다.
+   • 새로운 호출 프로토콜과 기존 호환 코드 모두 지원합니다.
+3. 주 IPC 처리기 변경
+   • 메인 프로세스에서 호출의 출처인 탭 컨텍스트 정보를 파싱하고, 이를 기반으로 호출 매핑을 구축합니다.
+   • 에러 로깅에 탭 ID 및 창 ID 정보를 추가하여 문제 추적을 용이하게 합니다.
+4. EventBus 기능 확장
+   • 새로운 메서드 sendToTab(tabId, eventName, …) 및 sendToWindow(windowId, eventName, …)를 추가합니다.
+   • 기존의 브로드캐스트 메커니즘은 그대로 유지됩니다.
 
-- 自动注入当前tab上下文信息
-- 支持新旧协议的兼容处理
-- 增强错误处理和日志记录
+#### 예상 효과
 
-##### 3. 升级主进程IPC处理器
+• 90% 이상의 탭 간 이벤트 혼란 문제를 해결합니다.
 
-- 解析tab上下文信息
-- 建立调用来源映射
-- 改进错误响应机制
+• 호출 체인을 명확히 하여 디버깅 및 유지보수성이 개선됩니다.
 
-##### 4. 扩展 EventBus 功能
+• 후속 단계의 기반을 마련합니다.
 
-- 添加 `sendToTab(tabId, eventName, ...args)` 方法
-- 添加 `sendToWindow(windowId, eventName, ...args)` 方法
-- 保持现有广播机制的兼容性
+### 단계 2: IPC 통신 채널 관리 최적화 (중기 – 2~3주)
 
-#### 预期效果
+#### 목표
 
-- 解决90%的tab间事件错乱问题
-- 提供清晰的调用链路追踪
-- 为后续优化奠定基础
+• 탭별 IPC 채널 격리를 구현하여 통신 경계를 명확히 합니다.
 
-### 阶段二: IPC通道管理优化 (中期 - 2-3周)
+• 성능 및 리소스 사용을 최적화하고, 더 복잡한 멀티 탭 시나리오를 지원합니다.
 
-#### 目标
+#### 구체적 실행
 
-- 实现基于tab的IPC通道隔离
-- 优化性能和资源使用
-- 支持更复杂的多tab场景
-
-#### 具体实施
-
-##### 1. 设计Tab级IPC管理器
+1. TabIPCManager 설계
 
 ```typescript
 class TabIPCManager {
@@ -75,59 +66,41 @@ class TabIPCManager {
 }
 ```
 
-##### 2. 实现Presenter上下文隔离
+2. Presenter 상태 격리
+   • 탭 단위의 presenter 상태를 분리하고 데이터 격리 기능을 추가합니다.
+   • 공유 상태 관리 메커니즘도 함께 제공합니다.
+3. 이벤트 구독 및 라우팅 최적화
+   • 탭별 이벤트 구독 기능을 도입하여 의도하지 않은 이벤트 전달을 줄입니다.
+   • 정확하게 필요한 탭에만 이벤트를 라우팅합니다.
 
-- 支持tab级别的presenter状态
-- 实现tab间数据隔离
-- 提供共享状态管理机制
+#### 예상 효과
 
-##### 3. 优化事件订阅机制
+• 탭 간의 영향을 최소화하고 시스템 성능 및 안정성이 크게 향상됩니다.
 
-- 支持tab级事件订阅
-- 实现智能事件路由
-- 减少不必要的事件传播
+• 복잡한 멀티 탭 비즈니스 로직을 원활하게 지원할 수 있습니다.
 
-#### 预期效果
+### 단계 3: 아키텍처 현대화 개선 (장기 – 3~4주)
 
-- 完全消除tab间干扰
-- 提升系统性能和稳定性
-- 支持复杂的多tab业务逻辑
+#### 목표
 
-### 阶段三: 架构现代化升级 (长期 - 3-4周)
+• 최신 IPC 아키텍처를 도입하여 미래의 확장성을 보장하고 개발자 경험을 개선합니다.
 
-#### 目标
+#### 구체적 실행
 
-- 采用现代化IPC架构设计
-- 支持未来扩展需求
-- 提供最佳的开发体验
+1. 새로운 IPC 프로토콜 설계
+   • 비동기 스트림 통신 및 내장 오류 처리, 리트라이 메커니즘을 갖추도록 합니다.
+2. 스마트 라우팅 시스템 구축
+   • 규칙 기반의 이벤트 라우팅 및 동적 로드 밸런싱을 통해 탭별 요구에 맞게 처리합니다.
+3. 완전한 모니터링 체계 구축
+   • IPC 호출 성능, 오류 발생 횟수, 상태 변경 사항을 실시간으로 추적하여 개선 가능성을 확인할 수 있습니다.
 
-#### 具体实施
+## 현대화된 IPC 아키텍처 설계 (Utility Process 기반)
 
-##### 1. 设计新一代IPC协议
+### 설계 개요
 
-- 支持异步流式通信
-- 内置错误处理和重试机制
-- 支持类型安全的接口定义
+Utility Process를 중심으로 IPC 조정 및 상태 관리의 현대적인 아키텍처를 도입합니다. 이는 Service Worker와 달리 완전히 격리된 프로세스 공간을 제공하여 리소스 사용 및 오류 처리 측면에서 더욱 견고한 구조입니다.
 
-##### 2. 实现智能路由系统
-
-- 基于规则的事件路由
-- 动态负载均衡
-- 支持插件化扩展
-
-##### 3. 建立完整的监控体系
-
-- IPC调用性能监控
-- 错误统计和分析
-- 开发调试工具集成
-
-## 现代化IPC架构设计 (基于utilityProcess)
-
-### 架构概述
-
-采用utilityProcess作为IPC中介层，实现多进程协调和状态管理的现代化架构。相比Service Worker方案，utilityProcess提供更好的资源隔离、独立的进程空间，以及更强的容错能力。
-
-### 整体架构图
+### 전체 아키텍처 다이어그램
 
 ```mermaid
 graph TB
@@ -193,9 +166,9 @@ graph TB
     style LM fill:#fce4ec
 ```
 
-### 核心组件设计
+### 핵심 구성 요소 설계
 
-#### 1. IPC协调服务 (utilityProcess)
+#### 1. IPC 조정 서비스 (Utility Process)
 
 ```typescript
 // src/utility/ipc-coordinator.ts
@@ -219,7 +192,7 @@ class IPCCoordinator {
     this.lifecycleManager = new LifecycleManager()
   }
 
-  // 处理来自渲染进程的调用
+  // 렌더링 프로세스의 호출을 처리합니다.
   async handleRendererCall(request: IPCRequest): Promise<IPCResponse> {
     const route = this.routeManager.resolveRoute(request)
     const queuedCall = await this.messageQueue.enqueue(request, route)
@@ -233,7 +206,7 @@ class IPCCoordinator {
     }
   }
 
-  // 处理状态同步
+  // 렌더링 프로세스의 상태 변경을 전달합니다.
   async syncStateToRenderers(stateUpdate: StateUpdate) {
     const affectedTabs = this.routeManager.getAffectedTabs(stateUpdate)
     await Promise.all(
@@ -243,7 +216,7 @@ class IPCCoordinator {
 }
 ```
 
-#### 2. 智能路由管理器
+#### 2. 스마트 라우팅 관리자
 
 ```typescript
 // src/utility/route-manager.ts
@@ -276,7 +249,7 @@ class RouteManager {
     }
   }
 
-  // 获取受状态更新影响的tab
+  // 상태 변경에 영향을 받는 탭을 반환합니다.
   getAffectedTabs(stateUpdate: StateUpdate): number[] {
     switch (stateUpdate.scope) {
       case 'global':
@@ -292,7 +265,7 @@ class RouteManager {
 }
 ```
 
-#### 3. 分布式状态管理器
+#### 3. 분산 상태 관리자
 
 ```typescript
 // src/utility/state-manager.ts
@@ -334,12 +307,12 @@ class StateManager {
         break
     }
 
-    // 触发依赖更新
+    // 의존성 변경을 적용합니다.
     await this.updateDependentStates(slice)
   }
 
   getState(context: IPCContext, key: string): StateSlice | null {
-    // 优先级: tab -> window -> global
+    // 우선순위: 탭 > 창 > 전역
     return (
       this.tabStates.get(context.tabId)?.get(key) ||
       this.windowStates.get(context.windowId)?.get(key) ||
@@ -348,7 +321,7 @@ class StateManager {
     )
   }
 
-  // 创建状态快照用于恢复
+  // 상태 스냅샷 생성, 복구 용도로 사용합니다.
   createSnapshot(): StateSnapshot {
     return {
       global: new Map(this.globalState),
@@ -360,7 +333,7 @@ class StateManager {
 }
 ```
 
-#### 4. 消息队列与并发控制
+#### 4. 메시지 큐 및 동시 처리 제어
 
 ```typescript
 // src/utility/message-queue.ts
@@ -396,15 +369,18 @@ class MessageQueue {
 
     this.queue.enqueue(queuedMessage)
 
-    // 返回Promise，等待处理完成
+    // 처리가 완료될 때까지 반환하는 Promise를 반환합니다.
     return new Promise((resolve, reject) => {
       this.processQueue()
-      // 注册回调...
+      // (콜백 등록 코드 생략)
     })
   }
 
   private async processQueue(): Promise<void> {
-    while (this.processing.size < this.maxConcurrency && !this.queue.isEmpty()) {
+    while (
+      this.processing.size < this.maxConcurrency &&
+      !this.queue.isEmpty()
+    ) {
       const message = this.queue.dequeue()
       if (message) {
         const promise = this.processMessage(message)
@@ -412,7 +388,7 @@ class MessageQueue {
 
         promise.finally(() => {
           this.processing.delete(message.id)
-          this.processQueue() // 递归处理队列
+          this.processQueue() // 큐 처리를 재귀적으로 호출합니다.
         })
       }
     }
@@ -420,9 +396,9 @@ class MessageQueue {
 }
 ```
 
-### 通信协议设计
+### 통신 프로토콜 설계
 
-#### 1. 统一消息格式
+#### 1. 통합 메시지 형식
 
 ```typescript
 // src/shared/ipc-protocol.ts
@@ -459,31 +435,31 @@ interface IPCEvent extends IPCMessage {
 }
 ```
 
-#### 2. 类型安全的API定义
+#### 2. 타입 안전 API 정의
 
 ```typescript
 // src/shared/ipc-contracts.ts
 interface IPCContract {
-  // 定义所有可用的方法签名
+  // 모든 사용 가능한 메서드의 서명을 정의합니다.
   'config.getConfig': () => Promise<Config>
   'config.updateConfig': (updates: Partial<Config>) => Promise<void>
   'thread.createThread': (params: CreateThreadParams) => Promise<Thread>
   'llm.sendMessage': (params: SendMessageParams) => Promise<MessageResponse>
 }
 
-// 生成类型安全的客户端
+// 타입 안전한 클라이언트 생성
 type IPCClient = {
   [K in keyof IPCContract]: IPCContract[K]
 }
 
-// 在渲染进程中使用
+// 렌더링 프로세스에서 사용하는 예시
 const ipcClient: IPCClient = createIPCClient()
 const config = await ipcClient['config.getConfig']()
 ```
 
-### 性能优化策略
+### 성능 최적화 전략
 
-#### 1. 智能缓存机制
+#### 1. 스마트 캐싱 메커니즘
 
 ```typescript
 // src/utility/cache-manager.ts
@@ -517,7 +493,7 @@ class CacheManager {
 }
 ```
 
-#### 2. 批量操作优化
+#### 2. 배치 처리 최적화
 
 ```typescript
 // src/utility/batch-processor.ts
@@ -534,13 +510,13 @@ class BatchProcessor {
 
     this.batches.get(batchKey)!.push(operation)
 
-    // 设置批量处理定时器
+    // 배치 처리 타이머 설정
     this.scheduleBatchProcess(batchKey)
 
     return operation.promise
   }
 
-  private scheduleBatchProcess(batchKey: string): void {
+  private async scheduleBatchProcess(batchKey: string): Promise<void> {
     if (this.timers.has(batchKey)) {
       return
     }
@@ -548,16 +524,16 @@ class BatchProcessor {
     const timer = setTimeout(() => {
       this.processBatch(batchKey)
       this.timers.delete(batchKey)
-    }, 50) // 50ms批量窗口
+    }, 50) // 50ms 배치 창
 
     this.timers.set(batchKey, timer)
   }
 }
 ```
 
-### 错误处理和恢复机制
+### 오류 처리 및 복구 메커니즘
 
-#### 1. 容错处理
+#### 1. 탄력적인 에러 핸들링
 
 ```typescript
 // src/utility/error-handler.ts
@@ -588,7 +564,7 @@ class ErrorHandler {
       await this.delay(strategy.backoffMs * attempt)
 
       try {
-        // 重试原始调用
+        // 원래 호출을 재시도합니다.
         return await this.retryOriginalCall(context)
       } catch (retryError) {
         if (attempt === strategy.maxRetries) {
@@ -600,7 +576,7 @@ class ErrorHandler {
 }
 ```
 
-#### 2. 进程恢复机制
+#### 2. 프로세스 복구 메커니즘
 
 ```typescript
 // src/main/process-manager.ts
@@ -623,7 +599,7 @@ class ProcessManager {
       }
     )
 
-    // 监听进程崩溃
+    // 프로세스 종료를 감지합니다.
     this.utilityProcess.on('exit', (code) => {
       console.error(`Utility process exited with code ${code}`)
       if (!this.isRecovering) {
@@ -631,7 +607,7 @@ class ProcessManager {
       }
     })
 
-    // 设置通信通道
+    // 통신 채널 설정을 수행합니다.
     await this.setupIPCChannels()
   }
 
@@ -639,16 +615,16 @@ class ProcessManager {
     this.isRecovering = true
 
     try {
-      // 保存当前状态快照
+      // 현재 상태 스냅샷 생성
       const stateSnapshot = await this.captureStateSnapshot()
 
-      // 重新创建进程
+      // 새로운 프로세스 시작
       await this.createUtilityProcess()
 
-      // 恢复状态
+      // 상태 복원
       await this.restoreState(stateSnapshot)
 
-      // 通知所有渲染进程重新连接
+      // 모든 렌더링 프로세스에 재연결 요청 전송
       await this.notifyRenderersToReconnect()
     } finally {
       this.isRecovering = false
@@ -657,9 +633,9 @@ class ProcessManager {
 }
 ```
 
-### 监控和调试工具
+### 모니터링 및 디버깅 도구
 
-#### 1. 性能监控
+#### 1. 성능 모니터
 
 ```typescript
 // src/utility/performance-monitor.ts
@@ -689,7 +665,7 @@ class PerformanceMonitor {
       metadata
     })
 
-    // 检查性能阈值
+    // 성능 임계값 확인
     this.checkPerformanceThresholds(operation, duration)
   }
 
@@ -711,7 +687,7 @@ class PerformanceMonitor {
 }
 ```
 
-#### 2. 调试工具集成
+#### 2. IPC 디버깅 도구 통합
 
 ```typescript
 // src/dev-tools/ipc-debugger.ts
@@ -732,7 +708,7 @@ class IPCDebugger {
       timestamp: Date.now()
     })
 
-    // 限制追踪历史大小
+    // 최근 호출 히스토리 크기 제한
     if (this.callTrace.length > 1000) {
       this.callTrace.splice(0, 100)
     }
@@ -742,27 +718,26 @@ class IPCDebugger {
     return JSON.stringify(this.callTrace, null, 2)
   }
 
-  // 与Electron DevTools集成
+  // Electron DevTools와 통합하여 실시간 IPC 호출 모니터링을 제공합니다.
   setupDevToolsIntegration(): void {
     if (this.isEnabled) {
-      // 注册DevTools扩展
-      // 提供实时IPC调用监控界面
+      // DevTools 확장 등록 코드 생략
     }
   }
 }
 ```
 
-## 技术实现细节
+## 기술 구현 세부 사항
 
-### 1. Tab上下文获取策略
+### 1. 탭 컨텍스트 가져오기 전략
 
-#### WebContents ID映射方案
+#### WebContents ID 매핑 방식
 
 ```typescript
-// 在 TabPresenter 中维护映射关系
+// TabPresenter에서 WebContents와 탭 ID를 매핑합니다.
 private webContentsToTabId: Map<number, number> = new Map();
 
-// 在创建tab时建立映射
+// 새로운 탭 생성 시 매핑 설정
 async createTab(windowId: number, url: string, options: TabCreateOptions) {
   const view = new WebContentsView(/* ... */);
   const tabId = view.webContents.id;
@@ -770,25 +745,24 @@ async createTab(windowId: number, url: string, options: TabCreateOptions) {
   // ...
 }
 
-// 在IPC处理器中获取tabId
+// IPC 처리기에서 WebContents ID를 탭 ID로 변환합니다.
 ipcMain.handle('presenter:call', (event, ...args) => {
   const webContentsId = event.sender.id;
   const tabId = presenter.tabPresenter.getTabIdByWebContentsId(webContentsId);
   // ...
 });
 
-// 在渲染进程中通过preload API获取webContentsId (已有实现)
+// 렌더링 프로세스의 preload 계층을 통해 WebContents ID를 가져옵니다.
 const webContentsId = window.api.getWebContentsId();
-// 主进程自动通过webContentsId映射到tabId和windowId
 ```
 
-### 2. 事件路由实现
+### 2. 이벤트 라우팅 구현
 
-#### EventBus扩展设计
+#### EventBus 기능 확장 설계
 
 ```typescript
 export class EventBus extends EventEmitter {
-  // 新增方法
+  // 새로운 메서드 추가
   sendToTab(tabId: number, eventName: string, ...args: unknown[]) {
     const tabView = this.getTabView(tabId)
     if (tabView && !tabView.webContents.isDestroyed()) {
@@ -809,9 +783,9 @@ export class EventBus extends EventEmitter {
 }
 ```
 
-### 3. 错误处理和日志增强
+### 3. 오류 처리 및 로깅 강화
 
-#### 错误上下文结构
+#### 오류 컨텍스트 정의
 
 ```typescript
 interface IPCError {
@@ -825,7 +799,7 @@ interface IPCError {
 }
 ```
 
-#### 日志记录策略
+#### 로깅 전략
 
 ```typescript
 class IPCLogger {
@@ -842,116 +816,128 @@ class IPCLogger {
 }
 ```
 
-## 兼容性保证
+## 호환성 보장
 
-### 1. 渐进式升级路径
+### 1. 점진적 업그레이드 경로
 
-- 阶段一完全兼容现有代码
-- 阶段二提供迁移工具和指南
-- 阶段三支持新旧协议并存
+• 단계 1은 기존 코드와 완전히 호환됩니다.
 
-### 2. API兼容性保证
+• 단계 2에서는 마이그레이션 도구 및 가이드를 제공합니다.
+
+• 단계 3에서는 새로운 프로토콜과 기존 API가 함께 사용 가능합니다.
+
+### 2. API 호환성 보장
 
 ```typescript
-// 保持现有API不变
+// 외부 호출 인터페이스 변경 없이 내부를 업그레이드합니다.
 export function usePresenter<T extends keyof IPresenter>(name: T): IPresenter[T] {
-  // 内部升级，外部接口不变
+  // 내부적으로 새로운 라우팅 로직을 사용하도록 업그레이드
   return createEnhancedProxy(name)
 }
 ```
 
-### 3. 配置化升级
+### 3. 구성 기반 업그레이드
 
 ```typescript
-// 通过配置控制新功能的启用
-interface IPCConfig {
-  enableTabContext: boolean
-  enableAdvancedRouting: boolean
-  enablePerformanceMonitoring: boolean
+// 새 기능을 활성화/비활성화하는 구성 파일 예시
+interface IPCConfiguration {
+  experimental: {
+    useUtilityProcess: boolean
+    enableAdvancedRouting: boolean
+    enablePerformanceMonitoring: boolean
+  }
 }
 ```
 
-## 测试策略
+## 테스트 전략
 
-### 1. 单元测试覆盖
+### 1. 단위 테스트 커버리지
 
-- IPC调用路由正确性
-- 事件分发准确性
-- 错误处理完整性
+• 탭 간 IPC 호출 라우팅 정확성
 
-### 2. 集成测试场景
+• 이벤트 디스패치의 정밀도
 
-- 多tab并发操作
-- tab切换状态一致性
-- 窗口关闭资源清理
+• 오류 처리 완전성
 
-### 3. 性能测试指标
+### 2. 통합 테스트 시나리오
 
-- IPC调用延迟
-- 内存使用优化
-- 事件处理吞吐量
+• 멀티 탭 동시 작업
 
-## 风险控制
+• 탭 전환 시 상태 일관성
 
-### 1. 回滚机制
+• 창 종료 후 리소스 정리
 
-- 支持配置开关控制新功能
-- 保留原有代码路径
-- 提供快速回滚方案
+### 3. 성능 테스트 지표
 
-### 2. 监控和告警
+• IPC 호출 대기 시간
 
-- 实时监控IPC调用异常
-- 性能指标自动告警
-- 用户体验数据收集
+• 메모리 사용량 최적화
 
-### 3. 灰度发布
+• 이벤트 처리 처리량
 
-- 按功能模块逐步启用
-- 小范围用户测试
-- 根据反馈调整策略
+## 리스크 관리
 
-## 预期收益
+### 1. 롤백 메커니즘
 
-### 短期收益 (阶段一完成)
+• 새 기능을 구성 파일로 제어하여 필요시 빠르게 원래 코드 경로로 돌아갑니다.
 
-- 消除tab间事件错乱问题
-- 提升调试和维护效率
-- 改善用户体验
+• 원래 코드 흐름을 유지합니다.
 
-### 中期收益 (阶段二完成)
+### 2. 모니터링 및 알람
 
-- 系统稳定性显著提升
-- 支持更复杂的多tab功能
-- 开发效率大幅提升
+• IPC 호출 이상 사항을 실시간으로 감지하여 자동 알람 발송
 
-### 长期收益 (阶段三完成)
+• 사용자 경험 데이터 수집
 
-- 具备现代化的IPC架构
-- 支持未来业务扩展
-- 成为技术标杆实践
+### 3. 그레이들 배포
 
-## 实施路线图与技术选型
+• 기능별로 점진적으로 롤아웃하고, 소규모 사용자 테스트를 통해 피드백을 반영합니다.
 
-### 第一里程碑: utilityProcess 基础架构 (Week 1-2)
+## 예상 성과
 
-#### 技术选型说明
+### 단기 (단계 1 완료 시)
 
-##### utilityProcess vs Service Worker 对比
+• 탭 간 이벤트 혼란 문제가 크게 해결됩니다.
 
-| 特性         | utilityProcess                 | Service Worker              |
-| ------------ | ------------------------------ | --------------------------- |
-| 进程隔离     | ✅ 完全独立的进程              | ❌ 仍在渲染进程上下文       |
-| 资源管理     | ✅ 独立内存空间，易于监控      | ⚠️ 与渲染进程共享资源       |
-| 容错能力     | ✅ 进程崩溃不影响主功能        | ❌ 崩溃可能影响整个tab      |
-| 调试便利性   | ✅ 独立的DevTools调试          | ⚠️ 需要特殊的调试工具       |
-| 性能开销     | ⚠️ 进程间通信开销              | ✅ 较低的通信开销           |
-| Electron支持 | ✅ 原生支持，API稳定           | ❌ 需要额外配置和兼容性处理 |
-| 扩展性       | ✅ 易于水平扩展多个utility进程 | ⚠️ 扩展性受限               |
+• 디버깅 및 유지보수 효율이 향상됩니다.
 
-**结论**: utilityProcess 在我们的多tab场景下提供更好的隔离性和容错能力，虽然有一定的进程间通信开销，但带来的架构优势远超性能成本。
+• 사용자 경험 개선
 
-#### 核心接口设计
+### 중기 (단계 2 완료 시)
+
+• 시스템 안정성이 크게 개선되고, 복잡한 멀티 탭 기능 지원 가능합니다.
+
+• 개발 효율성이 크게 향상됩니다.
+
+### 장기 (단계 3 완료 시)
+
+• modernized IPC 아키텍처를 구축하여 미래의 확장을 수월하게 할 수 있습니다.
+
+• 기술 최적의 사례가 되어 개발 팀의 표준으로 자리 잡습니다.
+
+## 실행 로드맵 및 기술 선택
+
+### 제 1 리바운드: Utility Process 기반 인프라 구축 (1~2주)
+
+#### 기술 선택 사항 설명
+
+Utility Process vs Service Worker 비교:
+
+| 특성          | Utility Process                              | Service Worker                  |
+| ------------- | -------------------------------------------- | ------------------------------- |
+| 프로세스 격리 | ✓ 완전히 독립된 프로세스                    | ✗ 렌더링 프로세스 내에서 실행  |
+| 리소스 관리   | ✓ 독립된 메모리 공간, 쉬운 모니터링         | ⚠️ 특별 처리 필요             |
+| 오류 처리     | ✓ 더 견고한 프로세스 장애 대응              | ✗ 프로세스 실패 시 영향을 받음 |
+| 디버깅 용이성 | ✓ 독립된 DevTools 디버깅 가능               | ⚠️ 특별한 디버깅 도구 필요    |
+| 성능 오버헤드 | ⚠️ 프로세스 간 통신에 추가적인 오버헤드    | ✓ 통신 오버헤드가 적음         |
+| Electron 지원 | ✓ 원래 지원, API 안정성                     | ✗ 추가 구성 및 호환 처리 필요  |
+| 확장성        | ✓ 수평적으로 여러 Utility Process 실행 가능 | ⚠️ 확장성 제한                |
+
+**결론:**
+
+Utility Process는 멀티 탭 시나리오에서 프로세스 격리와 오류 처리 측면에서 더 강력하지만, 추가적인 IPC 통신 오버헤드가 있어도 전반적으로 아키텍처의 장점이 크게 입증됩니다.
+
+#### 핵심 인터페이스 정의
 
 ```typescript
 // src/shared/ipc-types.ts
@@ -994,7 +980,7 @@ export interface CacheOptions {
 }
 ```
 
-#### utilityProcess 启动配置
+#### Utility Process 시작 구성
 
 ```typescript
 // src/main/utility-process-manager.ts
@@ -1033,7 +1019,7 @@ export class UtilityProcessManager {
   private async handleProcessCrash(processName: string): Promise<void> {
     console.warn(`Utility process ${processName} crashed, attempting recovery...`)
 
-    // 等待一定时间后重启
+    // 잠시 대기 후 프로세스를 다시 시작합니다.
     await this.delay(1000)
 
     if (processName === 'ipc-coordinator') {
@@ -1043,9 +1029,9 @@ export class UtilityProcessManager {
 }
 ```
 
-### 第二里程碑: 渐进式迁移策略 (Week 3-4)
+### 제 2 리바운드: 점진적 이전 전략 (3~4주)
 
-#### 兼容性适配器设计
+#### 호환성 어댑터 설계
 
 ```typescript
 // src/main/presenter/compatibility-adapter.ts
@@ -1053,7 +1039,7 @@ export class CompatibilityAdapter {
   private useUtilityProcess: boolean = false
 
   constructor() {
-    // 通过配置控制是否启用新架构
+    // 구성에 의해 새 아키텍처 사용 여부를 결정합니다.
     this.useUtilityProcess = this.getConfig('experimental.useUtilityProcess', false)
   }
 
@@ -1094,7 +1080,7 @@ export class CompatibilityAdapter {
     method: string,
     ...payloads: unknown[]
   ): Promise<unknown> {
-    // 保持原有的直接调用逻辑
+    // 기존의 직접 호출 로직을 그대로 유지합니다.
     const calledPresenter = presenter[name as keyof Presenter]
     if (calledPresenter && isFunction(calledPresenter, method)) {
       return calledPresenter[method](...payloads)
@@ -1104,7 +1090,7 @@ export class CompatibilityAdapter {
 }
 ```
 
-#### 配置驱动的功能开关
+#### 구성 기반 기능 켜기/끄기
 
 ```typescript
 // src/shared/config-schema.ts
@@ -1135,7 +1121,7 @@ export interface IPCConfiguration {
   }
 }
 
-// 默认配置
+// 기본 구성 값
 export const DEFAULT_IPC_CONFIG: IPCConfiguration = {
   experimental: {
     useUtilityProcess: false,
@@ -1164,9 +1150,9 @@ export const DEFAULT_IPC_CONFIG: IPCConfiguration = {
 }
 ```
 
-### 第三里程碑: 性能优化与监控 (Week 5-6)
+### 제 3 리바운드: 성능 최적화 및 모니터링 (5~6주)
 
-#### 智能缓存策略
+#### 스마트 캐싱 전략
 
 ```typescript
 // src/utility/cache-strategies.ts
@@ -1196,7 +1182,7 @@ export class IntelligentCacheManager {
       return result
     }
 
-    // Cache miss - fetch and store
+    // 캐시 미스 시 데이터 조회 후 저장합니다.
     result = await fetcher()
     cache.set(key, result)
     this.recordMiss(key)
@@ -1207,19 +1193,19 @@ export class IntelligentCacheManager {
   private selectOptimalStrategy(key: string): CacheStrategy {
     const hitRate = this.hitRates.get(key) || 0
 
-    // 根据历史命中率选择最优缓存策略
+    // 이전 호출의 명중률에 따라 최적 캐싱 전략을 선택합니다.
     if (hitRate > 0.8) {
-      return CacheStrategy.LRU // 高频访问用LRU
+      return CacheStrategy.LRU // 높은 명중률: LRU 사용
     } else if (key.includes('config') || key.includes('model')) {
-      return CacheStrategy.TTL // 配置类数据用TTL
+      return CacheStrategy.TTL // 구성 데이터: TTL 캐싱
     } else {
-      return CacheStrategy.LRU // 默认LRU
+      return CacheStrategy.LRU // 기본값으로 LRU 선택
     }
   }
 }
 ```
 
-#### 实时性能监控
+#### 실시간 성능 모니터링
 
 ```typescript
 // src/utility/real-time-monitor.ts
@@ -1230,10 +1216,10 @@ export class RealTimeMonitor {
   recordMetric(metric: PerformanceMetric): void {
     this.metricsBuffer.push(metric)
 
-    // 实时告警检查
+    // 실시간 알람 확인
     this.checkAlertRules(metric)
 
-    // 定期清理缓冲区
+    // 버퍼가 너무 클 경우 정리합니다.
     if (this.metricsBuffer.length > 10000) {
       this.flushMetrics()
     }
@@ -1257,7 +1243,7 @@ export class RealTimeMonitor {
       message: rule.message(metric)
     }
 
-    // 发送告警到主进程
+    // 주 프로세스에 알람을 전송합니다.
     this.sendAlertToMain(alert)
   }
 
@@ -1265,20 +1251,20 @@ export class RealTimeMonitor {
     this.alertRules.push(rule)
   }
 
-  // 预定义告警规则
   setupDefaultAlertRules(): void {
     this.addAlertRule({
       name: 'high-latency',
       condition: (metric) => metric.duration > 5000,
       severity: 'warning',
-      message: (metric) => `High latency detected: ${metric.operation} took ${metric.duration}ms`
+      message: (metric) =>
+        `High latency detected: ${metric.operation} took ${metric.duration}ms`
     })
 
     this.addAlertRule({
       name: 'high-error-rate',
       condition: (metric) => {
-        const recentErrors = this.getRecentErrorRate(metric.operation, 60000) // 1分钟内
-        return recentErrors > 0.1 // 错误率超过10%
+        const recentErrors = this.getRecentErrorRate(metric.operation, 60000)
+        return recentErrors > 0.1
       },
       severity: 'critical',
       message: (metric) => `High error rate for ${metric.operation}`
@@ -1287,9 +1273,9 @@ export class RealTimeMonitor {
 }
 ```
 
-### 第四里程碑: 生产环境部署 (Week 7-8)
+### 제 4 리바운드: 프로덕션 배포 (7~8주)
 
-#### 部署检查清单
+#### 배포 확인 목록
 
 ```typescript
 // src/main/deployment-checker.ts
@@ -1314,8 +1300,10 @@ export class DeploymentChecker {
 
   private async checkUtilityProcessSupport(): Promise<DeploymentCheck> {
     try {
-      // 测试创建utility process
-      const testProcess = utilityProcess.fork(path.join(__dirname, '../utility/test-process.js'))
+      // Utility Process 생성 테스트
+      const testProcess = utilityProcess.fork(
+        path.join(__dirname, '../utility/test-process.js')
+      )
       await this.waitForProcessReady(testProcess, 5000)
       testProcess.kill()
 
@@ -1352,12 +1340,11 @@ export class DeploymentChecker {
 }
 ```
 
-#### 监控指标定义
+#### 모니터링 메트릭 정의
 
 ```typescript
 // src/shared/monitoring-metrics.ts
 export interface SystemMetrics {
-  // IPC性能指标
   ipc: {
     totalCalls: number
     avgLatency: number
@@ -1367,21 +1354,18 @@ export interface SystemMetrics {
     timeoutRate: number
   }
 
-  // 进程健康指标
   processes: {
     main: ProcessHealth
     utility: ProcessHealth
     renderers: ProcessHealth[]
   }
 
-  // 资源使用指标
   resources: {
     memoryUsage: MemoryMetrics
     cpuUsage: number
     handleCount: number
   }
 
-  // 业务指标
   business: {
     activeTabCount: number
     concurrentOperations: number
@@ -1400,50 +1384,50 @@ export interface ProcessHealth {
 }
 ```
 
-## 技术债务和迁移注意事项
+## 기술 부채 및 이주 주의 사항
 
-### 现有代码影响分析
+### 변경 영향 분석
 
-#### 需要修改的文件清单
+#### 수정 대상 파일 리스트
 
 ```typescript
-// 高优先级 - 核心IPC逻辑
+// 높은 우선 순위 – 핵심 IPC 로직
 const HIGH_PRIORITY_FILES = [
-  'src/main/presenter/index.ts', // 主要的IPC处理器
-  'src/renderer/src/composables/usePresenter.ts', // 渲染进程IPC客户端
-  'src/main/eventbus.ts', // 事件总线
-  'src/shared/presenter.d.ts' // 类型定义
+  'src/main/presenter/index.ts', // 주 IPC 처리기
+  'src/renderer/src/composables/usePresenter.ts', // 렌더링 프로세스의 IPC 클라이언트
+  'src/main/eventbus.ts', // 이벤트 버스
+  'src/shared/presenter.d.ts' // 타입 정의 파일
 ]
 
-// 中优先级 - Presenter实现
+// 중간 우선 순위 – Presenter 구현
 const MEDIUM_PRIORITY_FILES = [
   'src/main/presenter/configPresenter.ts',
   'src/main/presenter/threadPresenter.ts',
   'src/main/presenter/tabPresenter.ts'
-  // ... 其他presenter文件
+  // 기타 Presenter 파일들도 포함됩니다.
 ]
 
-// 低优先级 - 测试和配置
+// 낮은 우선 순위 – 테스트 및 구성
 const LOW_PRIORITY_FILES = [
-  'tests/**/*.spec.ts', // 测试文件需要更新
-  'src/main/index.ts', // 主进程入口
-  'electron.vite.config.ts' // 构建配置
+  'tests/**/*.spec.ts', // 테스트 파일 수정 필요
+  'src/main/index.ts', // 메인 프로세스 진입점
+  'electron.vite.config.ts' // 빌드 설정 파일
 ]
 ```
 
-#### 迁移风险评估
+#### 리스크 평가
 
-| 风险类别   | 风险等级 | 影响范围    | 缓解措施                 |
-| ---------- | -------- | ----------- | ------------------------ |
-| 性能回退   | 中       | 所有IPC调用 | 性能基准测试，渐进式启用 |
-| 兼容性问题 | 低       | 现有API     | 兼容性适配器，双路径支持 |
-| 进程稳定性 | 中       | utility进程 | 自动恢复机制，监控告警   |
-| 调试复杂度 | 中       | 开发体验    | 专用调试工具，详细文档   |
-| 内存占用   | 低       | 系统资源    | 内存监控，优化配置       |
+| 위험 클래스     | 위험 수준 | 영향 범위       | 완화 방안                           |
+| --------------- | --------- | --------------- | ----------------------------------- |
+| 성능 하락       | 중        | 모든 IPC 호출   | 성능 기반 테스트, 점진적으로 롤아웃 |
+| 호환성 문제     | 낮        | 기존 API        | 호환성 어댑터 및 이중 경로 지원     |
+| 프로세스 안정성 | 중        | Utility Process | 자동 복구 메커니즘, 모니터링 알람   |
+| 디버깅 복잡도   | 중        | 개발 경험       | 전용 디버깅 도구 및 상세 문서 제공  |
+| 메모리 사용량   | 낮        | 시스템 리소스   | 메모리 모니터링, 최적화된 구성      |
 
-### 回滚策略
+### 롤백 전략
 
-#### 快速回滚机制
+#### 빠른 롤백 메커니즘
 
 ```typescript
 // src/main/rollback-manager.ts
@@ -1454,19 +1438,19 @@ export class RollbackManager {
   async performEmergencyRollback(reason: string): Promise<void> {
     console.warn(`Performing emergency rollback: ${reason}`)
 
-    // 1. 立即禁用新特性
+    // 새 기능 비활성화
     await this.disableExperimentalFeatures()
 
-    // 2. 恢复到legacy IPC路径
+    // legacy IPC 경로로 변경합니다.
     await this.switchToLegacyIPC()
 
-    // 3. 清理utility process
+    // Utility Process 정리
     await this.cleanupUtilityProcesses()
 
-    // 4. 记录回滚事件
+    // 롤백 이벤트를 기록합니다.
     this.logRollbackEvent(reason)
 
-    // 5. 通知相关系统
+    // 관련 시스템에 롤백 완료 정보 전송
     this.notifyRollbackComplete()
   }
 
@@ -1474,68 +1458,59 @@ export class RollbackManager {
     this.currentConfig.experimental = {
       useUtilityProcess: false,
       enableAdvancedRouting: false,
-      enablePerformanceMonitoring: true, // 保持监控
-      enableBatchProcessing: false
+      enablePerformanceMonitoring: true // 모니터링은 유지함
     }
-
     await this.saveConfig(this.currentConfig)
   }
 }
 ```
 
-## 下一步行动计划
+## 다음 단계 실행 계획
 
-### 立即行动项 (本周内)
+### 즉시 실행할 항목 (이번 주 내)
 
-1. **环境准备**
+1. 환경 준비
+   • src/utility/ 디렉터리 구조 생성
+   • TypeScript 설정 변경하여 Utility Process를 지원하도록 함
+   • 필요한 개발 의존성 설치
+2. 프로토타입 개발
+   • 기본 IPCCoordinator 클래스 개발
+   • 간단한 RouteManager 프로토타입 생성
+   • Utility Process의 시작 및 IPC 통신 테스트
+3. 호환성 설계
+   • CompatibilityAdapter 인터페이스 설계
+   • 구성 파일 템플릿 준비
+   • 기능 켜기/끄기를 위한 설정 파일 생성
 
-   - [ ] 创建 `src/utility/` 目录结构
-   - [ ] 设置TypeScript配置支持utility process
-   - [ ] 安装必要的开发依赖
+### 단기 목표 (2주 내)
 
-2. **原型开发**
+1. 핵심 기능 구현
+   • StateManager, MessageQueue 완성
+   • 에러 처리 프레임워크 구축
+2. 통합 테스트 수행
+   • 단일 Presenter 메서드 호출 테스트
+   • 멀티 탭 동시 작업 시나리오 검증
+   • 오류 복구 메커니즘 확인
+3. 성능 기반 설정
+   • 현재 시스템의 성능 벤치마크 수립
+   • 성능 테스트 케이스 설계
+   • 모니터링 지표 수집 준비
 
-   - [ ] 实现基础的 `IPCCoordinator` 类
-   - [ ] 创建简单的 `RouteManager` 原型
-   - [ ] 测试utility process的创建和通信
+### 중기 목표 (1개월 내)
 
-3. **兼容性设计**
-   - [ ] 设计 `CompatibilityAdapter` 接口
-   - [ ] 创建配置文件模板
-   - [ ] 准备功能开关机制
-
-### 短期目标 (2周内)
-
-1. **核心功能实现**
-
-   - [ ] 完成 `StateManager` 的设计和实现
-   - [ ] 实现基础的 `MessageQueue`
-   - [ ] 建立错误处理框架
-
-2. **集成测试**
-
-   - [ ] 单个presenter方法的调用测试
-   - [ ] 多tab并发场景测试
-   - [ ] 错误恢复机制测试
-
-3. **性能基准**
-   - [ ] 建立当前系统的性能基准
-   - [ ] 设计性能测试用例
-   - [ ] 准备监控指标收集
-
-### 中期目标 (1个月内)
-
-1. **生产就绪**
-
-   - [ ] 完整的监控和告警系统
-   - [ ] 部署检查和验证流程
-   - [ ] 回滚机制的完善
-
-2. **文档和培训**
-   - [ ] API文档更新
-   - [ ] 开发者指南编写
-   - [ ] 团队培训计划
+1. 프로덕션 준비
+   • 완전한 모니터링 및 알람 시스템 구축
+   • 배포 검사 및 검증 흐름 마련
+   • 롤백 메커니즘 최적화
+2. 문서 업데이트 및 개발자 교육
+   • API 문서 수정
+   • 개발자 가이드 작성
+   • 팀 간 교육 계획 수립
 
 ---
 
-**总结**: 这个基于utilityProcess的现代化IPC架构设计提供了完整的技术方案，从渐进式迁移到最终的生产部署。通过详细的实施路线图和风险控制措施，确保了升级过程的安全性和可控性。接下来的关键是按照计划逐步实施，并在每个里程碑节点进行充分的测试验证。
+**결론:**
+
+이번 modernized IPC 아키텍처의 실행 계획은 Utility Process 기반의 점진적 업그레이드 전략을 통해 멀티 탭 환경에서 90% 이상의 IPC 커뮤니케이션 문제를 해결하고, 개발자들에게 더 나은 디버깅 및 유지보수 도구를 제공합니다. 다음 단계에서는 실제 환경 테스트를 통해 실행 계획을 검증하고, 필요 시 후속 업그레이드 단계(Phase 2)를 진행할지 여부를 결정합니다.
+
+<style>#mermaid-1750043985232{font-family:sans-serif;font-size:16px;fill:#333;}#mermaid-1750043985232 .error-icon{fill:#552222;}#mermaid-1750043985232 .error-text{fill:#552222;stroke:#552222;}#mermaid-1750043985232 .edge-thickness-normal{stroke-width:2px;}#mermaid-1750043985232 .edge-thickness-thick{stroke-width:3.5px;}#mermaid-1750043985232 .edge-pattern-solid{stroke-dasharray:0;}#mermaid-1750043985232 .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-1750043985232 .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-1750043985232 .marker{fill:#333333;}#mermaid-1750043985232 .marker.cross{stroke:#333333;}#mermaid-1750043985232 svg{font-family:sans-serif;font-size:16px;}#mermaid-1750043985232 .label{font-family:sans-serif;color:#333;}#mermaid-1750043985232 .label text{fill:#333;}#mermaid-1750043985232 .node rect,#mermaid-1750043985232 .node circle,#mermaid-1750043985232 .node ellipse,#mermaid-1750043985232 .node polygon,#mermaid-1750043985232 .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid-1750043985232 .node .label{text-align:center;}#mermaid-1750043985232 .node.clickable{cursor:pointer;}#mermaid-1750043985232 .arrowheadPath{fill:#333333;}#mermaid-1750043985232 .edgePath .path{stroke:#333333;stroke-width:1.5px;}#mermaid-1750043985232 .flowchart-link{stroke:#333333;fill:none;}#mermaid-1750043985232 .edgeLabel{background-color:#e8e8e8;text-align:center;}#mermaid-1750043985232 .edgeLabel rect{opacity:0.5;background-color:#e8e8e8;fill:#e8e8e8;}#mermaid-1750043985232 .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#mermaid-1750043985232 .cluster text{fill:#333;}#mermaid-1750043985232 div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:sans-serif;font-size:12px;background:hsl(80,100%,96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#mermaid-1750043985232:root{--mermaid-font-family:sans-serif;}#mermaid-1750043985232:root{--mermaid-alt-font-family:sans-serif;}#mermaid-1750043985232 flowchart{fill:apa;}</style>

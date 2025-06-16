@@ -1,236 +1,258 @@
-# EventBus 使用指南
 
-## 概述
+# EventBus 사용 가이드
 
-EventBus 类提供了主进程和渲染进程之间精确的事件通信机制。它继承自 EventEmitter，专注于提供明确的事件发送控制，支持向主进程、渲染进程或特定窗口发送事件。
+## 개요
 
-## 核心理念
+EventBus 클래스는 주 프로세스와 렌더러 프로세스 간의 정밀한 이벤트 통신 메커니즘을 제공합니다. 이 클래스는 EventEmitter를 상속 받아 명시적인 이벤트 전송 제어에 집중하며, 주 프로세스, 렌더러 프로세스, 특정 창으로 이벤트를 보낼 수 있도록 설계되었습니다.
 
-- **精确控制**：使用具体的发送方法，明确事件的目标
-- **显式发送**：所有跨进程通信都需要明确指定
-- **类型安全**：完整的 TypeScript 支持
-- **简洁架构**：无复杂的自动转发机制
+## 핵심 철학
 
-## 主要方法
+* **정밀한 제어** ：특정 메서드를 사용하여 이벤트의 대상을 명확히 지정합니다.
+* **명시적 전송** ：모든 크로스 프로세스 통신은 명확히 호출해야 합니다.
+* **타입 안전** ：완벽한 TypeScript 지원으로 모든 매개변수의 타입을 검사합니다.
+* **간결한 아키텍처** ：자동 전송 메커니즘이 없어 코드가 더욱 간결하고 예측 가능합니다.
 
-### 1. 仅发送到主进程
+## 주요 메서드
+
+### 1. 오로지 주 프로세스로 이벤트 보내기
+
 ```typescript
 import { eventBus } from '@/main/eventbus'
 
-// 窗口管理、标签页操作等主进程内部事件
+// 창 관리 및 탭 작업 등 주 프로세스 내부 이벤트
 eventBus.sendToMain('window:created', windowId)
 eventBus.sendToMain('shortcut:create-new-tab', windowId)
 ```
 
-### 2. 发送到特定窗口
+### 2. 특정 창으로 이벤트 보내기
+
 ```typescript
 import { eventBus } from '@/main/eventbus'
 
-// 发送到指定窗口ID的渲染进程
+// 지정된 창 ID의 렌더러 프로세스에 이벤트 전송
 eventBus.sendToWindow('custom-event', windowId, data)
 ```
 
-### 3. 发送到渲染进程
+### 3. 렌더러 프로세스로 이벤트 보내기
+
 ```typescript
 import { eventBus, SendTarget } from '@/main/eventbus'
 
-// 发送到所有窗口（默认）
+// 모든 창(기본값)으로 전송
 eventBus.sendToRenderer('config:language-changed', SendTarget.ALL_WINDOWS, language)
 
-// 发送到默认标签页
+// 기본 탭으로 전송 (특수 시나리오)
 eventBus.sendToRenderer('deeplink:mcp-install', SendTarget.DEFAULT_TAB, data)
 ```
 
-### 4. 同时发送到主进程和渲染进程（推荐）
+### 4. 주 프로세스와 렌더러 프로세스 모두에 이벤트 보내기 (추천)
+
 ```typescript
-// 最常用的方法：确保主进程和渲染进程都能收到事件
+// 가장 일반적인 메서드: 주 프로세스와 렌더러 프로세스 모두가 이벤트를 받을 수 있도록 합니다.
 eventBus.send('config:provider-changed', SendTarget.ALL_WINDOWS, providers)
 eventBus.send('sync:backup-completed', SendTarget.ALL_WINDOWS, timestamp)
 ```
 
-## 事件分类指南
+## 이벤트 분류 가이드
 
-### 仅主进程内部
-适用于窗口管理、标签页操作等不需要渲染进程知道的事件：
+### 오로지 주 프로세스 내부
+
+창 관리 및 탭 작업 등 렌더러 프로세스에 알 필요가 없는 이벤트:
+
 ```typescript
 eventBus.sendToMain('window:created', windowId)
 eventBus.sendToMain('window:focused', windowId)
 eventBus.sendToMain('shortcut:create-new-window')
 ```
 
-### 仅渲染进程
-适用于纯 UI 更新，主进程不需要处理的事件：
+### 오로지 렌더러 프로세스
+
+UI 업데이트 전용, 주 프로세스에서 처리하지 않아도 되는 이벤트:
+
 ```typescript
 eventBus.sendToRenderer('notification:show-error', SendTarget.ALL_WINDOWS, error)
 eventBus.sendToRenderer('ui:theme-changed', SendTarget.ALL_WINDOWS, theme)
 ```
 
-### 主进程 + 渲染进程
-适用于配置变更、状态同步等需要两端都知道的事件：
+### 주 프로세스 및 렌더러 프로세스
+
+구성 변경, 상태 동기화 등 모든 측이 알아야 하는 이벤트:
+
 ```typescript
 eventBus.send('config:language-changed', SendTarget.ALL_WINDOWS, language)
 eventBus.send('sync:backup-started', SendTarget.ALL_WINDOWS)
 ```
 
-### 特定窗口通信
-适用于需要与特定窗口通信的场景：
+### 특정 창 간의 통신
+
+특정 창과 통신해야 하는 시나리오:
+
 ```typescript
 eventBus.sendToWindow('window:specific-action', targetWindowId, actionData)
 ```
 
-## SendTarget 选项
+## SendTarget 옵션
 
 ```typescript
 enum SendTarget {
-  ALL_WINDOWS = 'all_windows',    // 广播到所有窗口（默认，推荐）
-  DEFAULT_TAB = 'default_tab'     // 发送到默认标签页（特殊场景）
+  ALL_WINDOWS = 'all_windows',    // 모든 창에 브로드캐스트 (기본값, 추천)
+  DEFAULT_TAB = 'default_tab'     // 기본 탭으로 전송 (특수 시나리오)
 }
 ```
 
-## 初始化和配置
+## 초기화 및 구성
 
-### WindowPresenter 设置
+### WindowPresenter 설정
+
 ```typescript
 import { eventBus } from '@/main/eventbus'
 import { WindowPresenter } from '@/main/windowPresenter'
 
-// 在应用初始化时设置 WindowPresenter
+// 애플리케이션 초기화 시 WindowPresenter를 설정합니다.
 const windowPresenter = new WindowPresenter()
 eventBus.setWindowPresenter(windowPresenter)
 ```
 
-## 最佳实践
+## 최선의 실천 방법
 
-### 1. 配置变更事件
+### 1. 구성 변경 이벤트
+
 ```typescript
-// 在配置更新时，通知所有标签页
+// 구성을 업데이트할 때 모든 탭에 알림을 전송합니다.
 setLanguage(language: string) {
   this.setSetting('language', language)
   eventBus.send('config:language-changed', SendTarget.ALL_WINDOWS, language)
 }
 ```
 
-### 2. 窗口管理事件
+### 2. 창 관리 이벤트
+
 ```typescript
-// 窗口相关事件通常只需要主进程知道
+// 창 관련 이벤트는 주 프로세스만 알면 되므로 오로지 주 프로세스에 전송합니다.
 onWindowCreated(windowId: number) {
   eventBus.sendToMain('window:created', windowId)
 }
 ```
 
-### 3. 用户交互事件
+### 3. 사용자 상호작용 이벤트
+
 ```typescript
-// 快捷键等用户操作，可能需要发送到特定目标
+// 단축키 등의 사용자 작업은 특정 대상으로 전송할 수 있으나, 여기서는 모든 창에 이벤트를 전송합니다.
 onZoomIn() {
-  // 缩放需要所有窗口响应
+  // 확대 작업은 모든 창에서 처리되어야 합니다.
   eventBus.send('shortcut:zoom-in', SendTarget.ALL_WINDOWS)
 }
 ```
 
-### 4. 错误处理事件
+### 4. 오류 처리 이벤트
+
 ```typescript
-// 明确指定错误事件的发送目标
+// 오류 이벤트의 대상을 명시적으로 지정합니다.
 onStreamError(error: Error) {
-  // 主进程记录错误
+  // 주 프로세스에서 오류를 기록합니다.
   eventBus.sendToMain('stream:error-logged', error)
-  // 渲染进程显示错误
+  // 렌더러 프로세스에서 오류를 표시합니다.
   eventBus.sendToRenderer('stream:error-display', SendTarget.ALL_WINDOWS, error)
 }
 ```
 
-### 5. 流事件处理
+### 5. 스트림 이벤트 처리
+
 ```typescript
-// 处理各种流事件，明确指定发送目标
+// 다양한 스트림 이벤트를 처리하며 명확히 이벤트의 대상을 지정합니다.
 handleConversationEvents() {
-  // 会话激活 - 通知所有窗口更新UI
+  // 대화 시작: 모든 창의 UI 업데이트 알림 전송
   eventBus.send('conversation:activated', SendTarget.ALL_WINDOWS, conversationId)
 
-  // 消息编辑 - 通知所有窗口
+  // 메시지 수정: 모든 창에 알림 전송
   eventBus.send('conversation:message-edited', SendTarget.ALL_WINDOWS, messageData)
 }
 
-// MCP 服务器事件
+// MCP 서버 이벤트 처리
 handleMCPEvents() {
-  // MCP 服务器启动 - 通知主进程和所有窗口
+  // MCP 서버 시작: 주 프로세스와 모든 창에 알림 전송
   eventBus.send('mcp:server-started', SendTarget.ALL_WINDOWS, serverInfo)
 
-  // 配置变更 - 通知所有窗口
+  // 구성 변경: 모든 창에 알림 전송
   eventBus.send('mcp:config-changed', SendTarget.ALL_WINDOWS, newConfig)
 }
 ```
 
-## 类型安全
+## 타입 안전
 
-EventBus 完全支持 TypeScript，提供完整的类型检查：
+EventBus는 완벽한 TypeScript 지원을 통해 포괄적인 타입 검사를 제공합니다.
 
 ```typescript
-// 明确的参数类型
+// 명확히 정의된 매개변수 타입 사용 예시
 eventBus.send('config:changed', SendTarget.ALL_WINDOWS, {
   key: 'language',
   value: 'zh-CN'
 })
 
-// 安全的枚举使用
+// 안전한 열거형 사용 예시
 eventBus.sendToRenderer('ui:update', SendTarget.DEFAULT_TAB, data)
 ```
 
-## 注意事项
+## 주의 사항
 
-1. **WindowPresenter 依赖**：发送到渲染进程需要先设置 WindowPresenter
-2. **显式发送**：所有跨进程通信都需要明确调用相应的方法
-3. **事件命名规范**：建议使用 `模块:动作` 的命名格式
-4. **参数类型**：确保传递的参数可以被序列化
-5. **错误处理**：监听控制台警告，确保 WindowPresenter 正确设置
-6. **性能考虑**：避免频繁发送大型对象到渲染进程
+1. **WindowPresenter 종속성** ：렌더러 프로세스에 이벤트를 보내기 위해서는 먼저 WindowPresenter가 설정되어 있어야 합니다.
+2. **명시적 전송** ：모든 크로스 프로세스 통신은 명확히 호출해야 합니다.
+3. **이벤트 이름 규칙** ：'모듈:작업' 형식을 사용하는 것이 좋습니다.
+4. **매개변수 타입** ：전달되는 객체가 serialize 가능하도록 확인해야 합니다.
+5. **오류 처리** ：콘솔 경고를 모니터링하여 WindowPresenter가 올바르게 설정되었는지 확인합니다.
+6. **성능 고려사항** ：큰 객체를 자주 렌더러 프로세스에 보내는 것을 피하여 성능 저하를 방지해야 합니다.
 
-## 常见场景示例
+## 일반적인 사용 사례 예시
 
-### 配置系统
+### 구성 시스템
+
 ```typescript
 class ConfigManager {
   updateLanguage(language: string) {
     this.saveConfig('language', language)
-    // 明确通知所有窗口更新语言
+    // 모든 창에 언어 변경 알림을 명시적으로 전송합니다.
     eventBus.send('config:language-changed', SendTarget.ALL_WINDOWS, language)
   }
 }
 ```
 
-### 通知系统
+### 알림 시스템
+
 ```typescript
 class NotificationManager {
   showError(message: string) {
-    // 仅向渲染进程发送通知显示事件
+    // 오로지 렌더러 프로세스에 알림 표시 이벤트를 전송합니다.
     eventBus.sendToRenderer('notification:show-error', SendTarget.ALL_WINDOWS, message)
   }
 }
 ```
 
-### 快捷键处理
+### 단축키 처리
+
 ```typescript
 class ShortcutManager {
   handleGoSettings() {
-    // 通知渲染进程跳转到设置页面
+    // 렌더러 프로세스에 설정 페이지로 이동하라는 알림 전송
     eventBus.sendToRenderer('shortcut:go-settings', SendTarget.ALL_WINDOWS)
   }
 
   handleCleanHistory() {
-    // 主进程清理历史，然后通知渲染进程更新UI
+    // 주 프로세스에서 클린 역사 작업 후 렌더러 프로세스에 UI 갱신 알림 전송
     this.cleanHistoryInMain()
     eventBus.sendToRenderer('shortcut:clean-chat-history', SendTarget.ALL_WINDOWS)
   }
 }
 ```
 
-## 调试技巧
+## 디버깅 팁
 
 ```typescript
-// 监听主进程事件进行调试
+// 주 프로세스 이벤트를 감시하여 디버깅
 eventBus.on('*', (eventName, ...args) => {
   console.log(`Main process event: ${eventName}`, args)
 })
 
-// 检查 WindowPresenter 状态
+// WindowPresenter 상태 확인
 if (!eventBus.windowPresenter) {
   console.warn('WindowPresenter not set, renderer events will not work')
 }

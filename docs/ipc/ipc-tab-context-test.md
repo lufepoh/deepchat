@@ -1,74 +1,78 @@
-# IPC Tab上下文功能测试
 
-## 测试目标
+# IPC Tab 컨텍스트 기능 테스트
 
-验证多tab环境下IPC调用能够正确识别调用来源并提供精确的事件路由。
+## 테스트 목표
 
-## 测试场景
+멀티 탭 환경에서 IPC 호출이 올바른 호출 출처를 인식하고 정밀한 이벤트 라우팅을 제공하는지 확인합니다.
 
-### 1. 基础Tab上下文识别
+## 테스트 시나리오
 
-- **目标**: 验证主进程能正确通过webContentsId识别tab
-- **步骤**:
-  1. 创建多个tab
-  2. 在不同tab中调用presenter方法
-  3. 检查日志中的tab ID标识是否正确
+### 1. 기본 탭 컨텍스트 인식
 
-### 2. 事件精确路由
+* **목표:** 메인 프로세스가 WebContents ID를 통해 탭을 올바르게 식별할 수 있는지 확인합니다.
+* **단계** :
 
-- **目标**: 验证EventBus能将事件发送到正确的tab
-- **步骤**:
-  1. 在tab A中触发需要回调的操作
-  2. 验证回调事件只发送到tab A，不影响其他tab
+1. 여러 개의 탭 생성
+2. 다른 탭에서 presenter 메서드 호출
+3. 로그에 표시된 탭 ID가 올바른지 확인
 
-### 3. 错误处理增强
+### 2. 이벤트 정밀한 라우팅
 
-- **目标**: 验证错误日志包含正确的tab上下文
-- **步骤**:
-  1. 在不同tab中触发错误情况
-  2. 检查错误日志是否包含正确的tab ID信息
+* **목표:** EventBus가 이벤트를 올바른 탭으로 전송할 수 있는지 확인합니다.
+* **단계** :
 
-## 验证点
+1. 탭 A에서 호출이 필요한 작업을 트리거합니다.
+2. 콜백 이벤트가 탭 A에만 전송되고 다른 탭에는 영향을 미치지 않는지 확인합니다.
 
-### 主进程日志格式
+### 3. 오류 처리 강화
 
-```
+* **목표:** 에러 로그가 올바른 탭 컨텍스트를 포함하고 있는지 확인합니다.
+* **단계** :
+
+1. 다양한 탭에서 오류 상황을 발생시킵니다.
+2. 에러 로그가 올바른 탭 ID 정보를 포함하고 있는지 확인합니다.
+
+## 검증 항목
+
+### 메인 프로세스 로그 형식
+
+```javascript
 [IPC Call] Tab:123 Window:456 -> presenterName.methodName
 [IPC Warning] Tab:123 calling wrong presenter: invalidName
 [IPC Error] Tab:123 presenterName.methodName: Error message
 ```
 
-### 渲染进程日志格式
+### 렌더링 프로세스 로그 형식
 
-```
+```javascript
 [Renderer IPC] WebContents:789 -> presenterName.methodName
 [Renderer IPC Error] WebContents:789 presenterName.methodName: Error message
 ```
 
-### EventBus新功能验证
+### EventBus 신규 기능 검증
 
-- `eventBus.sendToTab(tabId, eventName, ...args)` - 发送到指定tab
-- `eventBus.sendToActiveTab(windowId, eventName, ...args)` - 发送到活跃tab
-- `eventBus.broadcastToTabs(tabIds, eventName, ...args)` - 广播到多个tab
+* `eventBus.sendToTab(tabId, eventName, ...args)` - 지정된 탭으로 이벤트 전송
+* `eventBus.sendToActiveTab(windowId, eventName, ...args)` - 활성 탭으로 이벤트 전송
+* `eventBus.broadcastToTabs(tabIds, eventName, ...args)` - 여러 탭에 이벤트 브로드캐스트
 
-## 预期结果
+## 예상 결과
 
-1. 所有IPC调用日志都包含正确的tab标识
-2. 事件能够精确路由到目标tab
-3. 不再出现tab间事件错乱问题
-4. 错误追踪更加精准
+1. 모든 IPC 호출 로그에 올바른 탭 식별 정보가 포함되어 있어야 합니다.
+2. 이벤트가 목표 탭으로 정확하게 라우팅됩니다.
+3. 탭 간 이벤트 혼동이 발생하지 않습니다.
+4. 오류 추적이 더욱 정밀해집니다.
 
-## 回归测试
+## 회귀 테스트
 
-确保以下现有功能不受影响：
+다음 기능은 변경되지 않아야 합니다:
 
-- 单tab环境下的正常运行
-- 现有的广播事件机制
-- WindowPresenter的功能
-- 所有presenter的现有API接口
+* 단일 탭 환경에서의 정상 작동
+* 기존의 브로드캐스트 이벤트 메커니즘
+* WindowPresenter 기능
+* 모든 presenter의 기존 API 인터페이스
 
-## 性能验证
+## 성능 검증
 
-- IPC调用延迟不应显著增加
-- 内存使用应保持稳定
-- Tab创建/销毁的性能不受影响
+1. IPC 호출의 지연 시간이 크게 증가하지 않아야 합니다.
+2. 메모리 사용량은 안정적이어야 합니다.
+3. 탭 생성/소멸 성능에 영향을 주지 않아야 합니다.
